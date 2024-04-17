@@ -29,6 +29,7 @@
 #include "parser/generated/LcypherParser.h"
 #include "parser/cypher_base_visitor.h"
 #include "parser/cypher_error_listener.h"
+#include "parser/rewrite_views.h"
 
 #include "cypher/execution_plan/execution_plan.h"
 #include "cypher/execution_plan/scheduler.h"
@@ -69,12 +70,17 @@ void Scheduler::EvalCypher(RTContext *ctx, const std::string &script, ElapsedTim
         ANTLRInputStream input(script);
         LcypherLexer lexer(&input);
         CommonTokenStream tokens(&lexer);
+        LOG_DEBUG() <<"parser s"<<std::endl; // de
         LcypherParser parser(&tokens);
         /* We can set ErrorHandler here.
          * setErrorHandler(std::make_shared<BailErrorStrategy>());
          * add customized ErrorListener  */
+        LOG_DEBUG() <<"parser e"<<std::endl; // de
         parser.addErrorListener(&CypherErrorListener::INSTANCE);
-        CypherBaseVisitor visitor(ctx, parser.oC_Cypher());
+        LOG_DEBUG() <<"visitor s"<<std::endl; // de
+        auto oc_cypher=parser.oC_Cypher();
+        CypherBaseVisitor visitor(ctx, oc_cypher);
+        LOG_DEBUG() <<"visitor e"<<std::endl; // de
         LOG_DEBUG() << "-----CLAUSE TO STRING-----";
         for (const auto &sql_query : visitor.GetQuery()) {
             LOG_DEBUG() << sql_query.ToString();
@@ -82,6 +88,7 @@ void Scheduler::EvalCypher(RTContext *ctx, const std::string &script, ElapsedTim
         plan = std::make_shared<ExecutionPlan>();
         plan->Build(visitor.GetQuery(), visitor.CommandType(), ctx);
         plan->Validate(ctx);
+        LOG_DEBUG() << "Command Type" <<plan->CommandType(); // de
         if (plan->CommandType() != parser::CmdType::QUERY) {
             ctx->result_info_ = std::make_unique<ResultInfo>();
             ctx->result_ = std::make_unique<lgraph::Result>();
@@ -89,9 +96,36 @@ void Scheduler::EvalCypher(RTContext *ctx, const std::string &script, ElapsedTim
             if (plan->CommandType() == parser::CmdType::EXPLAIN) {
                 header = "@plan";
                 data = plan->DumpPlan(0, false);
-            } else {
+            } else if (plan->CommandType() == parser::CmdType::PROFILE){
                 header = "@profile";
                 data = plan->DumpGraph();
+            }
+            else{
+                LOG_DEBUG() << "s";
+                const std::vector<cypher::PatternGraph>& pattern_graphs=plan->GetPatternGraphs();
+                LOG_DEBUG() << "new visitor s";
+                RewriteViews new_visitor(ctx,oc_cypher,pattern_graphs);
+                LOG_DEBUG() << "new visitor e";
+                auto view_name=new_visitor.GetViewName();
+                auto constraints=new_visitor.GetConstraints();
+                auto new_query=new_visitor.GetRewriteQuery();
+                LOG_DEBUG() << "hhh";
+                std::string create_query="CALL db.createEdgeLabel('"+view_name+"', '[[\""+constraints.first+"\",\""+constraints.second+"\"]]')";
+                std::cout<<"create query: "<<create_query<<std::endl;
+                std::cout<<"new query: "<<new_query<<std::endl;
+                LOG_DEBUG() << "shiwonidie";
+                EvalCypher(ctx,create_query,elapsed);
+                EvalCypher(ctx,new_query,elapsed);
+                ctx->result_info_ = std::make_unique<ResultInfo>();
+                ctx->result_ = std::make_unique<lgraph::Result>();
+
+                ctx->result_->ResetHeader({{"view_name", lgraph_api::LGraphType::STRING},{"start_node_label", lgraph_api::LGraphType::STRING},{"end_node_label", lgraph_api::LGraphType::STRING}});
+                auto r = ctx->result_->MutableRecord();
+                r->Insert("view_name", lgraph::FieldData(view_name));
+                r->Insert("start_node_label", lgraph::FieldData(constraints.first));
+                r->Insert("end_node_label", lgraph::FieldData(constraints.second));
+                LOG_DEBUG() << "end";
+                return;
             }
             ctx->result_->ResetHeader({{header, lgraph_api::LGraphType::STRING}});
             auto r = ctx->result_->MutableRecord();

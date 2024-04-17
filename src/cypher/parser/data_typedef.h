@@ -42,6 +42,7 @@ enum CmdType {
     QUERY,
     EXPLAIN,
     PROFILE,
+    VIEW,
 };
 
 static const char *const ANONYMOUS = "@ANON_";

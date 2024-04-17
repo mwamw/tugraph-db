@@ -1,5 +1,5 @@
 
-// Generated from src/cypher/grammar/Lcypher.g4 by ANTLR 4.13.0
+// Generated from /home2/xcj/tugraph-2024-04-11/tugraph-db-master/src/cypher/grammar/../../..//src/cypher/grammar/Lcypher.g4 by ANTLR 4.12.0
 
 #pragma once
 
@@ -25,6 +25,8 @@ public:
     virtual std::any visitOC_Statement(LcypherParser::OC_StatementContext *context) = 0;
 
     virtual std::any visitOC_Query(LcypherParser::OC_QueryContext *context) = 0;
+
+    virtual std::any visitOC_View(LcypherParser::OC_ViewContext *context) = 0;
 
     virtual std::any visitOC_RegularQuery(LcypherParser::OC_RegularQueryContext *context) = 0;
 

@@ -155,12 +155,20 @@ class CypherBaseVisitor : public LcypherVisitor {
     std::any visitOC_Statement(LcypherParser::OC_StatementContext *ctx) override {
         _cmd_type = ctx->EXPLAIN()   ? CmdType::EXPLAIN
                     : ctx->PROFILE() ? CmdType::PROFILE
+                    : ctx->oC_View() ? CmdType::VIEW
                                      : CmdType::QUERY;
+        LOG_DEBUG() << "parser cmd type: "<<_cmd_type;
         return visitChildren(ctx);
     }
 
     std::any visitOC_Query(LcypherParser::OC_QueryContext *ctx) override {
         return visitChildren(ctx);
+    }
+
+    std::any visitOC_View(LcypherParser::OC_ViewContext *ctx) override {
+        LOG_DEBUG() << "visit oc view"<<std::endl;
+        visit(ctx->oC_RegularQuery());
+        return 0;
     }
 
     std::any visitOC_RegularQuery(LcypherParser::OC_RegularQueryContext *ctx) override {

@@ -37,6 +37,7 @@ oC_Cypher : SP? oC_Statement ( SP? ';' )? SP? EOF ;
 oC_Statement : oC_Query
              | EXPLAIN SP? oC_Query
              | PROFILE SP? oC_Query
+             | oC_View
              ;
 
 EXPLAIN : ( 'E' | 'e' ) ( 'X' | 'x' ) ( 'P' | 'p' ) ( 'L' | 'l' ) ( 'A' | 'a' ) ( 'I' | 'i' ) ( 'N' | 'n' ) ;
@@ -46,6 +47,11 @@ PROFILE : ( 'P' | 'p' ) ( 'R' | 'r' ) ( 'O' | 'o' ) ( 'F' | 'f' ) ( 'I' | 'i' ) 
 oC_Query : oC_RegularQuery
          | oC_StandaloneCall
          ;
+
+
+oC_View : CREATE SP? VIEW SP? oC_LabelName SP? AS SP? oC_RegularQuery ;
+
+VIEW : ( 'V' | 'v' ) ( 'I' | 'i' ) ( 'E' | 'e' ) ( 'W' | 'w' ) ;
 
 oC_RegularQuery : oC_SingleQuery ( SP? oC_Union )* ;
 
@@ -105,7 +111,7 @@ CREATE : ( 'C' | 'c' ) ( 'R' | 'r' ) ( 'E' | 'e' ) ( 'A' | 'a' ) ( 'T' | 't' ) (
 
 oC_Create : CREATE SP? oC_Pattern ;
 
-oC_Set : SET SP? oC_SetItem ( SP? ',' SP? oC_SetItem )* ;
+oC_Set : SET SP? oC_SetItem ( ',' oC_SetItem )* ;
 
 SET : ( 'S' | 's' ) ( 'E' | 'e' ) ( 'T' | 't' )  ;
 
