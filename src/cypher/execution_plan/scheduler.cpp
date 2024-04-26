@@ -93,7 +93,10 @@ void Scheduler::UpdateView(RTContext *ctx){
     LOG_DEBUG() << "Update view";
     #include <fstream>
     #include <nlohmann/json.hpp>
-    auto file_path="/data/view/"+ctx->graph_+".json";
+    auto parent_dir=ctx->galaxy_->GetConfig().dir;
+    if(parent_dir.end()[-1]=='/')parent_dir.pop_back();
+    auto file_path=parent_dir+"/view/"+ctx->graph_+".json";
+    // std::string file_path="/data/view/"+ctx->graph_+".json";
     std::ifstream ifs(file_path);
     nlohmann::json j;
     try {
@@ -199,8 +202,10 @@ void Scheduler::EvalCypher(RTContext *ctx, const std::string &script, ElapsedTim
                 r->Insert("start_node_label", lgraph::FieldData(constraints.first));
                 r->Insert("end_node_label", lgraph::FieldData(constraints.second));
                 // 将信息保存到json文件中
-                std::string data_folder="/data/view";
-                std::string file_path=data_folder+"/"+ctx->graph_+".json";
+                auto parent_dir=ctx->galaxy_->GetConfig().dir;
+                if(parent_dir.end()[-1]=='/')parent_dir.pop_back();
+                std::string file_path=parent_dir+"/view/"+ctx->graph_+".json";
+                // std::string file_path="/data/view/"+ctx->graph_+".json";
                 AddElement(file_path,view_name,constraints.first,constraints.second,new_query);
                 
                 elapsed.t_total = fma_common::GetTime() - t0;
@@ -258,6 +263,7 @@ void Scheduler::EvalCypher(RTContext *ctx, const std::string &script, ElapsedTim
 void Scheduler::EvalCypher(RTContext *ctx, const std::string &script, ElapsedTime &elapsed) {
     using namespace parser;
     using namespace antlr4;
+    // LOG_DEBUG()<<"tugraph dir: "<< ctx->galaxy_->GetConfig().dir;
     auto t0 = fma_common::GetTime();
     // <script, execution plan>
     thread_local LRUCacheThreadUnsafe<std::string, std::shared_ptr<ExecutionPlan>> tls_plan_cache;
@@ -323,8 +329,10 @@ void Scheduler::EvalCypher(RTContext *ctx, const std::string &script, ElapsedTim
                 r->Insert("start_node_label", lgraph::FieldData(constraints.first));
                 r->Insert("end_node_label", lgraph::FieldData(constraints.second));
                 // 将信息保存到json文件中
-                std::string data_folder="/data/view";
-                std::string file_path=data_folder+"/"+ctx->graph_+".json";
+                auto parent_dir=ctx->galaxy_->GetConfig().dir;
+                if(parent_dir.end()[-1]=='/')parent_dir.pop_back();
+                std::string file_path=parent_dir+"/view/"+ctx->graph_+".json";
+                // std::string file_path="/data/view/"+ctx->graph_+".json";
                 AddElement(file_path,view_name,constraints.first,constraints.second,new_query);
                 
                 elapsed.t_total = fma_common::GetTime() - t0;

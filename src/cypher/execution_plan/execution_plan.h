@@ -40,6 +40,7 @@ class ExecutionPlan {
     ResultInfo _result_info;
     // query parts local member
     std::vector<PatternGraph> _pattern_graphs;
+    std::string _view_path;
 
     void _AddScanOp(const parser::QueryPart &part, const SymbolTable *sym_tab, Node *node,
                     std::vector<OpBase *> &ops, bool skip_arg_op);

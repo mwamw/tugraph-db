@@ -538,7 +538,10 @@ void BuiltinProcedure::DbDeleteLabel(RTContext *ctx, const Record *record, const
     // 删除视图的json文件相关内容
     #include <fstream>
     #include <nlohmann/json.hpp>
-    auto file_path="/data/view/"+ctx->graph_+".json";
+    auto parent_dir=ctx->galaxy_->GetConfig().dir;
+    if(parent_dir.end()[-1]=='/')parent_dir.pop_back();
+    std::string file_path=parent_dir+"/view/"+ctx->graph_+".json";
+    // std::string file_path="/data/view/"+ctx->graph_+".json";
     std::ifstream ifs(file_path);
     nlohmann::json j;
     try {

@@ -28,11 +28,15 @@ namespace cypher {
 class ExpandAll : public OpBase {
     friend class EdgeFilterPushdownExpand;
 
-    const std::set<std::string> _GetViewTypes(RTContext *ctx){
+    const std::set<std::string> _GetViewTypes(std::string view_path){
         #include <fstream>
         #include <nlohmann/json.hpp>
-        auto file_path="/data/view/"+ctx->graph_+".json";
-        std::ifstream ifs(file_path);
+        // #include "execution_plan/runtime_context.h"
+        // #include "db/galaxy.h"
+        // auto parent_dir=ctx->galaxy_->GetConfig().dir;
+        // if(parent_dir.end()[-1]=='/')parent_dir.pop_back();
+        // std::string file_path="/data/view/"+ctx->graph_+".json";
+        std::ifstream ifs(view_path);
         nlohmann::json j;
         try {
             ifs >> j;
@@ -61,7 +65,7 @@ class ExpandAll : public OpBase {
         //     break;
         // }
         //////////////////////
-        if(view_types.empty())view_types=_GetViewTypes(ctx);
+        // if(view_types_.empty())view_types_=_GetViewTypes(ctx);
         switch (expand_direction_) {
         case ExpandTowards::FORWARD:
             iter_type = types.empty() ? lgraph::EIter::VIEW_OUT_EDGE : lgraph::EIter::TYPE_OUT_EDGE;
@@ -75,7 +79,7 @@ class ExpandAll : public OpBase {
         }
         // LOG_DEBUG()<<"view list:"<<*(_GetViewTypes(ctx).begin());
         if(types.empty()){
-            eit_->Initialize(ctx->txn_->GetTxn().get(), iter_type, start_->PullVid(), view_types);
+            eit_->Initialize(ctx->txn_->GetTxn().get(), iter_type, start_->PullVid(), view_types_);
         }
         else
         //////////////////////
@@ -158,7 +162,7 @@ class ExpandAll : public OpBase {
     ExpandTowards expand_direction_;
     std::shared_ptr<lgraph::Filter> edge_filter_ = nullptr;
 
-    std::set<std::string> view_types;
+    std::set<std::string> view_types_;
     /* ExpandAllStates
      * Different states in which ExpandAll can be at. */
     enum ExpandAllState {
@@ -177,6 +181,35 @@ class ExpandAll : public OpBase {
           pattern_graph_(pattern_graph),
           edge_filter_(edge_filter) {
         CYPHER_THROW_ASSERT(start && neighbor && relp);
+        eit_ = relp->ItRef();
+        modifies.emplace_back(neighbor_->Alias());
+        modifies.emplace_back(relp_->Alias());
+        auto &sym_tab = pattern_graph->symbol_table;
+        auto sit = sym_tab.symbols.find(start_->Alias());
+        auto nit = sym_tab.symbols.find(neighbor_->Alias());
+        auto rit = sym_tab.symbols.find(relp_->Alias());
+        CYPHER_THROW_ASSERT(sit != sym_tab.symbols.end() && nit != sym_tab.symbols.end() &&
+                            rit != sym_tab.symbols.end());
+        expand_into_ = nit->second.scope == SymbolNode::ARGUMENT;
+        expand_direction_ = relp_->Undirected()            ? BIDIRECTIONAL
+                            : relp_->Src() == start_->ID() ? FORWARD
+                                                           : REVERSED;
+        start_rec_idx_ = sit->second.id;
+        nbr_rec_idx_ = nit->second.id;
+        relp_rec_idx_ = rit->second.id;
+        state_ = ExpandAllUninitialized;
+    }
+
+    ExpandAll(PatternGraph *pattern_graph, Node *start, Node *neighbor, Relationship *relp,
+              std::string view_path, std::shared_ptr<lgraph::Filter> edge_filter = nullptr)
+        : OpBase(OpType::EXPAND_ALL, "Expand"),
+          start_(start),
+          neighbor_(neighbor),
+          relp_(relp),
+          pattern_graph_(pattern_graph),
+          edge_filter_(edge_filter) {
+        CYPHER_THROW_ASSERT(start && neighbor && relp);
+        view_types_ = _GetViewTypes(view_path);
         eit_ = relp->ItRef();
         modifies.emplace_back(neighbor_->Alias());
         modifies.emplace_back(relp_->Alias());
