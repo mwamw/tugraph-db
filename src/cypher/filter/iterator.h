@@ -621,6 +621,86 @@ class TypeEdgeIterator {
     }
 };
 
+template <typename EIT>
+class ViewEdgeIterator {
+    lgraph::Transaction *_txn = nullptr;
+    EIT *_eit = nullptr;
+    /* Unlike vertex, if we’d like to describe some data such that
+     * the relationship could have any one of a set of types, then
+     * they can all be listed in the pattern like this:
+     * (a)-[r:TYPE1|TYPE2]->(b)  */
+    std::set<std::string> _view_types;
+    bool _valid = false;
+
+ public:
+    ViewEdgeIterator(lgraph::Transaction *txn, EIT *eit, const std::set<std::string> &view_types)
+        : _txn(txn), _eit(eit), _view_types(view_types) {
+        // skip view edge
+        while (_eit->IsValid()) {
+            if (_view_types.find(_txn->GetEdgeLabel(*_eit)) == _view_types.end()) {
+                _valid = true;
+                break;
+            }
+            _eit->Next();
+        }
+    }
+
+    ViewEdgeIterator(ViewEdgeIterator &&rhs) noexcept
+        : _txn(rhs._txn), _eit(rhs._eit), _view_types(std::move(rhs._view_types)), _valid(rhs._valid) {
+        rhs._txn = nullptr;
+        rhs._eit = nullptr;
+        rhs._valid = false;
+    }
+
+    ~ViewEdgeIterator() {
+        delete _eit;
+        _eit = nullptr;
+    }
+
+    EIT *Eit() const { return _eit; }
+
+    const std::set<std::string> &ViewTypes() const { return _view_types; }
+
+    bool Next() {
+        _valid = false;
+        while (_eit->IsValid()) {
+            _eit->Next();
+            if (_eit->IsValid() && _view_types.find(_txn->GetEdgeLabel(*_eit)) == _view_types.end()) {
+                _valid = true;
+                break;
+            }
+        }
+        return _valid;
+    }
+
+    bool IsValid() const { return _valid; }
+
+    lgraph::EdgeUid GetUid() const {
+        if (!IsValid()) THROW_CODE(InternalError, "get uid of invalid EIter");
+        return _eit->GetUid();
+    }
+
+    lgraph::VertexId GetSrc() const {
+        if (!IsValid()) THROW_CODE(InternalError, "get src of invalid EIter");
+        return _eit->GetSrc();
+    }
+
+    lgraph::VertexId GetDst() const {
+        if (!IsValid()) THROW_CODE(InternalError, "get dst of invalid EIter");
+        return _eit->GetDst();
+    }
+
+    lgraph::LabelId GetLabel() const {
+        if (!IsValid()) THROW_CODE(InternalError, "get label of invalid EIter");
+        return _eit->GetLabelId();
+    }
+
+    lgraph::EdgeId GetEdgeId() const {
+        if (!IsValid()) THROW_CODE(InternalError, "get eid of invalid EIter");
+        return _eit->GetEdgeId();
+    }
+};
+
 // wrapper of all kinds of edge iterators
 class EIter {
  public:
@@ -629,8 +709,11 @@ class EIter {
         IN_EDGE,
         TYPE_OUT_EDGE,
         TYPE_IN_EDGE,
+        VIEW_OUT_EDGE,
+        VIEW_IN_EDGE,
         BI_EDGE,
         BI_TYPE_EDGE,
+        BI_VIEW_EDGE,
         NA,
     };
 
@@ -663,6 +746,12 @@ class EIter {
         case TYPE_IN_EDGE:
             delete _tieit;
             break;
+        case VIEW_OUT_EDGE:
+            delete _voeit;
+            break;
+        case VIEW_IN_EDGE:
+            delete _vieit;
+            break;
         case BI_EDGE:
             if (_is_out) {
                 delete _oeit;
@@ -675,6 +764,13 @@ class EIter {
                 delete _toeit;
             } else {
                 delete _tieit;
+            }
+            break;
+        case BI_VIEW_EDGE:
+            if (_is_out) {
+                delete _voeit;
+            } else {
+                delete _vieit;
             }
             break;
         default:
@@ -716,8 +812,36 @@ class EIter {
         FreeIter();
         _txn = txn;
         _type = type;
+        ////////////////////////修改
         if (relp_types.empty()) return Initialize(txn, type, vid);
         switch (_type) {
+        ////////////////////////
+        case VIEW_OUT_EDGE:
+            _voeit = new ViewEdgeIterator<lgraph::graph::OutEdgeIterator>(
+                _txn, new lgraph::graph::OutEdgeIterator(_txn->GetOutEdgeIterator(vid)),
+                relp_types);
+            break;
+        case VIEW_IN_EDGE:
+            _vieit = new ViewEdgeIterator<lgraph::graph::InEdgeIterator>(
+                _txn, new lgraph::graph::InEdgeIterator(_txn->GetInEdgeIterator(vid)), relp_types);
+            break;
+        case BI_VIEW_EDGE:
+            {
+                _voeit = new ViewEdgeIterator<lgraph::graph::OutEdgeIterator>(
+                    _txn, new lgraph::graph::OutEdgeIterator(_txn->GetOutEdgeIterator(vid)),
+                    relp_types);
+                if (_voeit->IsValid()) {
+                    _is_out = true;
+                } else {
+                    delete _voeit;
+                    _vieit = new ViewEdgeIterator<lgraph::graph::InEdgeIterator>(
+                        _txn, new lgraph::graph::InEdgeIterator(_txn->GetInEdgeIterator(vid)),
+                        relp_types);
+                    _is_out = false;
+                }
+                break;
+            }
+        ////////////////////////
         case TYPE_OUT_EDGE:
             _toeit = new TypeEdgeIterator<lgraph::graph::OutEdgeIterator>(
                 _txn, new lgraph::graph::OutEdgeIterator(_txn->GetOutEdgeIterator(vid)),
@@ -786,10 +910,16 @@ class EIter {
             return (_toeit && _toeit->IsValid());
         case TYPE_IN_EDGE:
             return (_tieit && _tieit->IsValid());
+        case VIEW_OUT_EDGE:
+            return (_voeit && _voeit->IsValid());
+        case VIEW_IN_EDGE:
+            return (_vieit && _vieit->IsValid());
         case BI_EDGE:
             return _is_out ? (_oeit && _oeit->IsValid()) : (_ieit && _ieit->IsValid());
         case BI_TYPE_EDGE:
             return _is_out ? (_toeit && _toeit->IsValid()) : (_tieit && _tieit->IsValid());
+        case BI_VIEW_EDGE:
+            return _is_out ? (_voeit && _voeit->IsValid()) : (_vieit && _vieit->IsValid());
         default:
             return false;
         }
@@ -805,6 +935,10 @@ class EIter {
             return (_toeit && _toeit->Next());
         case TYPE_IN_EDGE:
             return (_tieit && _tieit->Next());
+        case VIEW_OUT_EDGE:
+            return (_voeit && _voeit->Next());
+        case VIEW_IN_EDGE:
+            return (_vieit && _vieit->Next());
         case BI_EDGE:
             if (_is_out) {
                 CYPHER_THROW_ASSERT(_oeit && _oeit->IsValid());
@@ -835,6 +969,23 @@ class EIter {
             } else {
                 return (_tieit && _tieit->Next());
             }
+        case BI_VIEW_EDGE:
+            if (_is_out) {
+                CYPHER_THROW_ASSERT(_voeit && _voeit->IsValid());
+                if (!_voeit) return false;
+                auto id = _voeit->GetSrc();
+                if (_voeit->Next()) return true;
+                /* NOTE: strictly speaking, the member methods should be called
+                 * before _voeit becomes invalid. */
+                auto types = _voeit->ViewTypes();
+                delete _voeit;
+                _vieit = new ViewEdgeIterator<lgraph::graph::InEdgeIterator>(
+                    _txn, new lgraph::graph::InEdgeIterator(_txn->GetInEdgeIterator(id)), types);
+                _is_out = false;
+                return _vieit->IsValid();
+            } else {
+                return (_vieit && _vieit->Next());
+            }
         default:
             return false;
         }
@@ -851,10 +1002,16 @@ class EIter {
             return _toeit->GetUid();
         case TYPE_IN_EDGE:
             return _tieit->GetUid();
+        case VIEW_OUT_EDGE:
+            return _voeit->GetUid();
+        case VIEW_IN_EDGE:
+            return _vieit->GetUid();
         case BI_EDGE:
             return _is_out ? _oeit->GetUid() : _ieit->GetUid();
         case BI_TYPE_EDGE:
             return _is_out ? _toeit->GetUid() : _tieit->GetUid();
+        case BI_VIEW_EDGE:
+            return _is_out ? _voeit->GetUid() : _vieit->GetUid();
         default:
             return {};
         }
@@ -871,10 +1028,16 @@ class EIter {
             return _toeit->GetLabel();
         case TYPE_IN_EDGE:
             return _tieit->GetLabel();
+        case VIEW_OUT_EDGE:
+            return _voeit->GetLabel();
+        case VIEW_IN_EDGE:
+            return _vieit->GetLabel();
         case BI_EDGE:
             return _is_out ? _oeit->GetLabelId() : _ieit->GetLabelId();
         case BI_TYPE_EDGE:
             return _is_out ? _toeit->GetLabel() : _tieit->GetLabel();
+        case BI_VIEW_EDGE:
+            return _is_out ? _voeit->GetLabel() : _vieit->GetLabel();
         default:
             return std::numeric_limits<lgraph::LabelId>::max();
         }
@@ -891,10 +1054,16 @@ class EIter {
             return _toeit->GetEdgeId();
         case TYPE_IN_EDGE:
             return _tieit->GetEdgeId();
+        case VIEW_OUT_EDGE:
+            return _voeit->GetEdgeId();
+        case VIEW_IN_EDGE:
+            return _vieit->GetEdgeId();
         case BI_EDGE:
             return _is_out ? _oeit->GetEdgeId() : _ieit->GetEdgeId();
         case BI_TYPE_EDGE:
             return _is_out ? _toeit->GetEdgeId() : _tieit->GetEdgeId();
+        case BI_VIEW_EDGE:
+            return _is_out ? _voeit->GetEdgeId() : _vieit->GetEdgeId();
         default:
             return -1;
         }
@@ -911,10 +1080,16 @@ class EIter {
             return _toeit->GetSrc();
         case TYPE_IN_EDGE:
             return _tieit->GetSrc();
+        case VIEW_OUT_EDGE:
+            return _voeit->GetSrc();
+        case VIEW_IN_EDGE:
+            return _vieit->GetSrc();
         case BI_EDGE:
             return _is_out ? _oeit->GetSrc() : _ieit->GetSrc();
         case BI_TYPE_EDGE:
             return _is_out ? _toeit->GetSrc() : _tieit->GetSrc();
+        case BI_VIEW_EDGE:
+            return _is_out ? _voeit->GetSrc() : _vieit->GetSrc();
         default:
             return -1;
         }
@@ -931,10 +1106,16 @@ class EIter {
             return _toeit->GetDst();
         case TYPE_IN_EDGE:
             return _tieit->GetDst();
+        case VIEW_OUT_EDGE:
+            return _voeit->GetDst();
+        case VIEW_IN_EDGE:
+            return _vieit->GetDst();
         case BI_EDGE:
             return _is_out ? _oeit->GetDst() : _ieit->GetDst();
         case BI_TYPE_EDGE:
             return _is_out ? _toeit->GetDst() : _tieit->GetDst();
+        case BI_VIEW_EDGE:
+            return _is_out ? _voeit->GetDst() : _vieit->GetDst();
         default:
             return -1;
         }
@@ -952,8 +1133,10 @@ class EIter {
             CYPHER_THROW_ASSERT(Undirected());
             if (_type == BI_EDGE) {
                 return _is_out ? _oeit->GetDst() : _ieit->GetSrc();
-            } else {
+            } else if(_type == BI_TYPE_EDGE) {
                 return _is_out ? _toeit->GetDst() : _tieit->GetSrc();
+            } else {
+                return _is_out ? _voeit->GetDst() : _vieit->GetSrc();
             }
         default:
             return -1;
@@ -973,11 +1156,18 @@ class EIter {
             return _txn->GetEdgeField(*(_toeit->Eit()), fd);
         case TYPE_IN_EDGE:
             return _txn->GetEdgeField(*(_tieit->Eit()), fd);
+        case VIEW_OUT_EDGE:
+            return _txn->GetEdgeField(*(_voeit->Eit()), fd);
+        case VIEW_IN_EDGE:
+            return _txn->GetEdgeField(*(_vieit->Eit()), fd);
         case BI_EDGE:
             return _is_out ? _txn->GetEdgeField(*_oeit, fd) : _txn->GetEdgeField(*_ieit, fd);
         case BI_TYPE_EDGE:
             return _is_out ? _txn->GetEdgeField(*(_toeit->Eit()), fd)
                            : _txn->GetEdgeField(*(_tieit->Eit()), fd);
+        case BI_VIEW_EDGE:
+            return _is_out ? _txn->GetEdgeField(*(_voeit->Eit()), fd)
+                           : _txn->GetEdgeField(*(_vieit->Eit()), fd);
         default:
             break;
         }
@@ -995,11 +1185,18 @@ class EIter {
             return _txn->GetEdgeLabel(*(_toeit->Eit()));
         case TYPE_IN_EDGE:
             return _txn->GetEdgeLabel(*(_tieit->Eit()));
+        case VIEW_OUT_EDGE:
+            return _txn->GetEdgeLabel(*(_voeit->Eit()));
+        case VIEW_IN_EDGE:
+            return _txn->GetEdgeLabel(*(_vieit->Eit()));
         case BI_EDGE:
             return _is_out ? _txn->GetEdgeLabel(*_oeit) : _txn->GetEdgeLabel(*_ieit);
         case BI_TYPE_EDGE:
             return _is_out ? _txn->GetEdgeLabel(*(_toeit->Eit()))
                            : _txn->GetEdgeLabel(*(_tieit->Eit()));
+        case BI_VIEW_EDGE:
+            return _is_out ? _txn->GetEdgeLabel(*(_voeit->Eit()))
+                           : _txn->GetEdgeLabel(*(_vieit->Eit()));
         default:
             break;
         }
@@ -1018,11 +1215,18 @@ class EIter {
             return _txn->GetEdgeFields(*(_toeit->Eit()));
         case TYPE_IN_EDGE:
             return _txn->GetEdgeFields(*(_tieit->Eit()));
+        case VIEW_OUT_EDGE:
+            return _txn->GetEdgeFields(*(_voeit->Eit()));
+        case VIEW_IN_EDGE:
+            return _txn->GetEdgeFields(*(_vieit->Eit()));
         case BI_EDGE:
             return _is_out ? _txn->GetEdgeFields(*_oeit) : _txn->GetEdgeFields(*_ieit);
         case BI_TYPE_EDGE:
             return _is_out ? _txn->GetEdgeFields(*(_toeit->Eit()))
                            : _txn->GetEdgeFields(*(_tieit->Eit()));
+        case BI_VIEW_EDGE:
+            return _is_out ? _txn->GetEdgeFields(*(_voeit->Eit()))
+                           : _txn->GetEdgeFields(*(_vieit->Eit()));
         default:
             break;
         }
@@ -1040,10 +1244,16 @@ class EIter {
             return Properties(*(_toeit->Eit()));
         case TYPE_IN_EDGE:
             return Properties(*(_tieit->Eit()));
+        case VIEW_OUT_EDGE:
+            return Properties(*(_voeit->Eit()));
+        case VIEW_IN_EDGE:
+            return Properties(*(_vieit->Eit()));
         case BI_EDGE:
             return _is_out ? Properties(*_oeit) : Properties(*_ieit);
         case BI_TYPE_EDGE:
             return _is_out ? Properties(*(_toeit->Eit())) : Properties(*(_tieit->Eit()));
+        case BI_VIEW_EDGE:
+            return _is_out ? Properties(*(_voeit->Eit())) : Properties(*(_vieit->Eit()));
         default:
             break;
         }
@@ -1055,6 +1265,8 @@ class EIter {
     union {
         lgraph::graph::OutEdgeIterator *_oeit = nullptr;
         lgraph::graph::InEdgeIterator *_ieit;
+        ViewEdgeIterator<lgraph::graph::OutEdgeIterator> *_voeit;
+        ViewEdgeIterator<lgraph::graph::InEdgeIterator> *_vieit;
         TypeEdgeIterator<lgraph::graph::OutEdgeIterator> *_toeit;
         TypeEdgeIterator<lgraph::graph::InEdgeIterator> *_tieit;
     };
@@ -1071,10 +1283,16 @@ class EIter {
             return _toeit;
         case TYPE_IN_EDGE:
             return _tieit;
+        case VIEW_OUT_EDGE:
+            return _voeit;
+        case VIEW_IN_EDGE:
+            return _vieit;
         case BI_EDGE:
             return (_is_out && _oeit) || (!_is_out && _ieit);
         case BI_TYPE_EDGE:
             return (_is_out && _toeit) || (!_is_out && _tieit);
+        case BI_VIEW_EDGE:
+            return (_is_out && _voeit) || (!_is_out && _vieit);
         default:
             return false;
         }

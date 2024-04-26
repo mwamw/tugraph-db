@@ -53,6 +53,7 @@ class Scheduler {
 
  private:
     void EvalCypher(RTContext *ctx, const std::string &script, ElapsedTime &elapsed);
+    void EvalCypher(RTContext *ctx, const std::string &script, ElapsedTime &elapsed, bool update_view);
 
     void EvalGql(RTContext *ctx, const std::string &script, ElapsedTime &elapsed);
 
@@ -61,5 +62,6 @@ class Scheduler {
 
     static bool DetermineGqlReadOnly(cypher::RTContext *ctx, const std::string &script,
                                      std::string &name, std::string &type);
+    void UpdateView(RTContext *ctx);
 };
 }  // namespace cypher

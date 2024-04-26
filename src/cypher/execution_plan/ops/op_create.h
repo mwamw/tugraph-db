@@ -53,6 +53,7 @@ class OpCreate : public OpBase {
         }
     }
 
+
     void CreateVertex(RTContext *ctx, const parser::TUP_NODE_PATTERN &node_pattern) {
         using namespace parser;
         auto &node_variable = std::get<0>(node_pattern);

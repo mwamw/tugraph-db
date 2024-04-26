@@ -244,8 +244,8 @@ class RewriteViews : public LcypherVisitor {
         const cypher::Node empty;
         auto start_node = &(pattern_graphs_[curr_pattern_graph].GetNode(start));
         auto end_node = &(pattern_graphs_[curr_pattern_graph].GetNode(end));
-        if(start_node->Label().empty()||end_node->Label().empty())
-            throw lgraph::CypherException("Views need explicit node labels");
+        // if(start_node->Label().empty()||end_node->Label().empty())
+        //     throw lgraph::CypherException("Views need explicit node labels");
         constraints.first=start_node->Label();
         constraints.second=end_node->Label();
         std::string result=start+","+end+" ";

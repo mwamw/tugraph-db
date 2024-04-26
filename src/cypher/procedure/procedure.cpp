@@ -535,6 +535,27 @@ void BuiltinProcedure::DbDeleteLabel(RTContext *ctx, const Record *record, const
     if (!ret) {
         throw lgraph::LabelNotExistException(label);
     }
+    // 删除视图的json文件相关内容
+    #include <fstream>
+    #include <nlohmann/json.hpp>
+    auto file_path="/data/view/"+ctx->graph_+".json";
+    std::ifstream ifs(file_path);
+    nlohmann::json j;
+    try {
+        ifs >> j;
+    } catch (nlohmann::json::parse_error& e) {
+        j = nlohmann::json::array();
+    }
+    ifs.close();
+    nlohmann::json new_j;
+    for (auto& element : j) {
+        std::string view_name = element["view_name"];
+        if(view_name==label)continue;
+        else new_j.push_back(element);
+    }
+    std::ofstream ofs(file_path);
+    ofs << new_j;
+    ofs.close();
 }
 
 // params: vertex/edge, label, field_names

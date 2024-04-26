@@ -28,21 +28,58 @@ namespace cypher {
 class ExpandAll : public OpBase {
     friend class EdgeFilterPushdownExpand;
 
+    const std::set<std::string> _GetViewTypes(RTContext *ctx){
+        #include <fstream>
+        #include <nlohmann/json.hpp>
+        auto file_path="/data/view/"+ctx->graph_+".json";
+        std::ifstream ifs(file_path);
+        nlohmann::json j;
+        try {
+            ifs >> j;
+        } catch (nlohmann::json::parse_error& e) {
+            j = nlohmann::json::array();
+        }
+        ifs.close();
+        std::set<std::string> view_types;
+        for (auto& element : j) {
+            view_types.emplace(element["view_name"]);
+        }
+        return view_types;
+    }
     void _InitializeEdgeIter(RTContext *ctx) {
         auto &types = relp_->Types();
         auto iter_type = lgraph::EIter::NA;
+        // switch (expand_direction_) {
+        // case ExpandTowards::FORWARD:
+        //     iter_type = types.empty() ? lgraph::EIter::OUT_EDGE : lgraph::EIter::TYPE_OUT_EDGE;
+        //     break;
+        // case ExpandTowards::REVERSED:
+        //     iter_type = types.empty() ? lgraph::EIter::IN_EDGE : lgraph::EIter::TYPE_IN_EDGE;
+        //     break;
+        // case ExpandTowards::BIDIRECTIONAL:
+        //     iter_type = types.empty() ? lgraph::EIter::BI_EDGE : lgraph::EIter::BI_TYPE_EDGE;
+        //     break;
+        // }
+        //////////////////////
+        if(view_types.empty())view_types=_GetViewTypes(ctx);
         switch (expand_direction_) {
         case ExpandTowards::FORWARD:
-            iter_type = types.empty() ? lgraph::EIter::OUT_EDGE : lgraph::EIter::TYPE_OUT_EDGE;
+            iter_type = types.empty() ? lgraph::EIter::VIEW_OUT_EDGE : lgraph::EIter::TYPE_OUT_EDGE;
             break;
         case ExpandTowards::REVERSED:
-            iter_type = types.empty() ? lgraph::EIter::IN_EDGE : lgraph::EIter::TYPE_IN_EDGE;
+            iter_type = types.empty() ? lgraph::EIter::VIEW_IN_EDGE : lgraph::EIter::TYPE_IN_EDGE;
             break;
         case ExpandTowards::BIDIRECTIONAL:
-            iter_type = types.empty() ? lgraph::EIter::BI_EDGE : lgraph::EIter::BI_TYPE_EDGE;
+            iter_type = types.empty() ? lgraph::EIter::BI_VIEW_EDGE : lgraph::EIter::BI_TYPE_EDGE;
             break;
         }
-        eit_->Initialize(ctx->txn_->GetTxn().get(), iter_type, start_->PullVid(), types);
+        // LOG_DEBUG()<<"view list:"<<*(_GetViewTypes(ctx).begin());
+        if(types.empty()){
+            eit_->Initialize(ctx->txn_->GetTxn().get(), iter_type, start_->PullVid(), view_types);
+        }
+        else
+        //////////////////////
+            eit_->Initialize(ctx->txn_->GetTxn().get(), iter_type, start_->PullVid(), types);
     }
 
     bool _CheckToSkipEdgeFilter(RTContext *ctx) const {
@@ -78,6 +115,7 @@ class ExpandAll : public OpBase {
 
     OpResult Next(RTContext *ctx) {
         // Reset iterators
+        // LOG_DEBUG() << "ExpandAll::Next";
         if (state_ == ExpandAllResetted) {
             /* Start node iterator may be invalid, such as when the start is an argument
              * produced by OPTIONAL MATCH.  */
@@ -120,6 +158,7 @@ class ExpandAll : public OpBase {
     ExpandTowards expand_direction_;
     std::shared_ptr<lgraph::Filter> edge_filter_ = nullptr;
 
+    std::set<std::string> view_types;
     /* ExpandAllStates
      * Different states in which ExpandAll can be at. */
     enum ExpandAllState {
