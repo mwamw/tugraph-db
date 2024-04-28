@@ -34,21 +34,62 @@ namespace cypher {
 
 /* Variable Length Expand */
 class VarLenExpand : public OpBase {
+    const std::set<std::string> _GetViewTypes(std::string view_path){
+        #include <fstream>
+        #include <nlohmann/json.hpp>
+        // #include "execution_plan/runtime_context.h"
+        // #include "db/galaxy.h"
+        // auto parent_dir=ctx->galaxy_->GetConfig().dir;
+        // if(parent_dir.end()[-1]=='/')parent_dir.pop_back();
+        // std::string file_path="/data/view/"+ctx->graph_+".json";
+        std::ifstream ifs(view_path);
+        nlohmann::json j;
+        try {
+            ifs >> j;
+        } catch (nlohmann::json::parse_error& e) {
+            j = nlohmann::json::array();
+        }
+        ifs.close();
+        std::set<std::string> view_types;
+        for (auto& element : j) {
+            view_types.emplace(element["view_name"]);
+        }
+        return view_types;
+    }
+
     void _InitializeEdgeIter(RTContext *ctx, int64_t vid, lgraph::EIter &eit) {
         auto &types = relp_->Types();
         auto iter_type = lgraph::EIter::NA;
+        // switch (expand_direction_) {
+        // case ExpandTowards::FORWARD:
+        //     iter_type = types.empty() ? lgraph::EIter::OUT_EDGE : lgraph::EIter::TYPE_OUT_EDGE;
+        //     break;
+        // case ExpandTowards::REVERSED:
+        //     iter_type = types.empty() ? lgraph::EIter::IN_EDGE : lgraph::EIter::TYPE_IN_EDGE;
+        //     break;
+        // case ExpandTowards::BIDIRECTIONAL:
+        //     iter_type = types.empty() ? lgraph::EIter::BI_EDGE : lgraph::EIter::BI_TYPE_EDGE;
+        //     break;
+        // }
+        // eit.Initialize(ctx->txn_->GetTxn().get(), iter_type, vid, types);
         switch (expand_direction_) {
         case ExpandTowards::FORWARD:
-            iter_type = types.empty() ? lgraph::EIter::OUT_EDGE : lgraph::EIter::TYPE_OUT_EDGE;
+            iter_type = types.empty() ? lgraph::EIter::VIEW_OUT_EDGE : lgraph::EIter::TYPE_OUT_EDGE;
             break;
         case ExpandTowards::REVERSED:
-            iter_type = types.empty() ? lgraph::EIter::IN_EDGE : lgraph::EIter::TYPE_IN_EDGE;
+            iter_type = types.empty() ? lgraph::EIter::VIEW_IN_EDGE : lgraph::EIter::TYPE_IN_EDGE;
             break;
         case ExpandTowards::BIDIRECTIONAL:
-            iter_type = types.empty() ? lgraph::EIter::BI_EDGE : lgraph::EIter::BI_TYPE_EDGE;
+            iter_type = types.empty() ? lgraph::EIter::BI_VIEW_EDGE : lgraph::EIter::BI_TYPE_EDGE;
             break;
         }
-        eit.Initialize(ctx->txn_->GetTxn().get(), iter_type, vid, types);
+        // LOG_DEBUG()<<"view list:"<<*(_GetViewTypes(ctx).begin());
+        if(types.empty()){
+            eit.Initialize(ctx->txn_->GetTxn().get(), iter_type, vid, view_types_);
+        }
+        else
+        //////////////////////
+            eit.Initialize(ctx->txn_->GetTxn().get(), iter_type, vid, types);
     }
 
 #if 0  // 20210704
@@ -308,6 +349,9 @@ class VarLenExpand : public OpBase {
         Consuming,     /* ExpandAll consuming data. */
     } state_;
 
+    std::string view_path_;
+    std::set<std::string> view_types_;
+
     VarLenExpand(PatternGraph *pattern_graph, Node *start, Node *neighbor, Relationship *relp)
         : OpBase(OpType::VAR_LEN_EXPAND, "Variable Length Expand"),
           pattern_graph_(pattern_graph),
@@ -319,6 +363,36 @@ class VarLenExpand : public OpBase {
           hop_(0),
           collect_all_(false),
           eits_(relp_->ItsRef()) {
+        throw lgraph::CypherException("We need view path now");
+        modifies.emplace_back(neighbor_->Alias());
+        modifies.emplace_back(relp_->Alias());
+        auto &sym_tab = pattern_graph->symbol_table;
+        auto sit = sym_tab.symbols.find(start_->Alias());
+        auto dit = sym_tab.symbols.find(neighbor_->Alias());
+        auto rit = sym_tab.symbols.find(relp_->Alias());
+        CYPHER_THROW_ASSERT(sit != sym_tab.symbols.end() && dit != sym_tab.symbols.end() &&
+                            rit != sym_tab.symbols.end());
+        expand_direction_ = relp_->Undirected()            ? BIDIRECTIONAL
+                            : relp_->Src() == start_->ID() ? FORWARD
+                                                           : REVERSED;
+        start_rec_idx_ = sit->second.id;
+        nbr_rec_idx_ = dit->second.id;
+        relp_rec_idx_ = rit->second.id;
+        state_ = Uninitialized;
+    }
+    VarLenExpand(PatternGraph *pattern_graph, Node *start, Node *neighbor, Relationship *relp, std::string view_path)
+        : OpBase(OpType::VAR_LEN_EXPAND, "Variable Length Expand"),
+          pattern_graph_(pattern_graph),
+          start_(start),
+          neighbor_(neighbor),
+          relp_(relp),
+          min_hop_(relp->MinHop()),
+          max_hop_(relp->MaxHop()),
+          hop_(0),
+          collect_all_(false),
+          eits_(relp_->ItsRef()),
+          view_path_(view_path) {
+        view_types_ = _GetViewTypes(view_path_);
         modifies.emplace_back(neighbor_->Alias());
         modifies.emplace_back(relp_->Alias());
         auto &sym_tab = pattern_graph->symbol_table;

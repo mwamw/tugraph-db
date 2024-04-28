@@ -162,6 +162,7 @@ class ExpandAll : public OpBase {
     ExpandTowards expand_direction_;
     std::shared_ptr<lgraph::Filter> edge_filter_ = nullptr;
 
+    std::string view_path_;
     std::set<std::string> view_types_;
     /* ExpandAllStates
      * Different states in which ExpandAll can be at. */
@@ -180,6 +181,7 @@ class ExpandAll : public OpBase {
           relp_(relp),
           pattern_graph_(pattern_graph),
           edge_filter_(edge_filter) {
+        throw lgraph::CypherException("We need view path now");
         CYPHER_THROW_ASSERT(start && neighbor && relp);
         eit_ = relp->ItRef();
         modifies.emplace_back(neighbor_->Alias());
@@ -207,9 +209,10 @@ class ExpandAll : public OpBase {
           neighbor_(neighbor),
           relp_(relp),
           pattern_graph_(pattern_graph),
-          edge_filter_(edge_filter) {
+          edge_filter_(edge_filter),
+          view_path_(view_path) {
         CYPHER_THROW_ASSERT(start && neighbor && relp);
-        view_types_ = _GetViewTypes(view_path);
+        view_types_ = _GetViewTypes(view_path_);
         eit_ = relp->ItRef();
         modifies.emplace_back(neighbor_->Alias());
         modifies.emplace_back(relp_->Alias());

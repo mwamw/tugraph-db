@@ -570,10 +570,10 @@ void ExecutionPlan::_BuildExpandOps(const parser::QueryPart &part, PatternGraph 
                 }
             } else if (relp.VarLen()) {
                 // expand when neighbor is not null
-                OpBase *expand_op = new VarLenExpand(&pattern_graph, &start, &neighbor, &relp);
+                OpBase *expand_op = new VarLenExpand(&pattern_graph, &start, &neighbor, &relp, _view_path);
                 expand_ops.emplace_back(expand_op);
             } else {
-                OpBase *expand_op = new ExpandAll(&pattern_graph, &start, &neighbor, &relp);
+                OpBase *expand_op = new ExpandAll(&pattern_graph, &start, &neighbor, &relp, _view_path);
                 expand_ops.emplace_back(expand_op);
             }
             // add property filter op
@@ -1263,6 +1263,10 @@ void ExecutionPlan::Build(const std::vector<parser::SglQuery> &stmt, parser::Cmd
         throw lgraph::CypherException(
             "All sub queries in an UNION must have the same column names.");
     }
+    auto parent_dir=ctx->galaxy_->GetConfig().dir;
+    if(parent_dir.end()[-1]=='/')parent_dir.pop_back();
+    _view_path = parent_dir+"/view/"+ctx->graph_+".json";
+    // _view_path="/data/view/"+ctx->graph_+".json";
     _cmd_type = cmd;
     /* read_only = AND(parts read_only)
      * so the initial value should be true.  */
