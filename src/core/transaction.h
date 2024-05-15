@@ -179,6 +179,11 @@ class Transaction {
         return curr_schema_->v_schema_manager.GetRecordLabel(it.GetProperty());
     }
 
+    const std::string& GetVertexLabel(size_t vid) const {
+        auto vit = graph_->GetUnmanagedVertexIterator(txn_.get(), vid);
+        return GetVertexLabel(vit);
+    }
+
     /**
      * Gets vertex label identifier
      *
@@ -200,6 +205,10 @@ class Transaction {
     ENABLE_IF_EIT(EIT, const std::string&)
     GetEdgeLabel(const EIT& it) const {
         return curr_schema_->e_schema_manager.GetSchema(it.GetLabelId())->GetLabel();
+    }
+
+    const std::string GetEdgeLabel(uint16_t label_id) const {
+        return curr_schema_->e_schema_manager.GetSchema(label_id)->GetLabel();
     }
 
     /**
@@ -513,6 +522,11 @@ class Transaction {
         if (!schema)
             THROW_CODE(InputError, "Vertex label \"{}\" does not exist.", label);
         return schema->GetPrimaryField();
+    }
+
+    const std::string& GetVertexPrimaryField(size_t vid){
+        auto vit = graph_->GetUnmanagedVertexIterator(txn_.get(), vid);
+        return GetVertexPrimaryField(GetVertexLabel(vit));
     }
 
     bool HasTemporalField(const std::string& label) {

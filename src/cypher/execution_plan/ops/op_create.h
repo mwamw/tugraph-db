@@ -18,8 +18,12 @@
 #pragma once
 
 #include "parser/clause.h"
+#include "parser/view_maintenance_visitor.h"
+#include "parser/varlen_unfold_visitor.h"
+#include "parser/generated/LcypherLexer.h"
+#include "parser/generated/LcypherParser.h"
 #include "cypher/execution_plan/ops/op.h"
-
+#include "cypher/execution_plan/scheduler.h"
 namespace cypher {
 
 class OpCreate : public OpBase {
@@ -28,6 +32,81 @@ class OpCreate : public OpBase {
     PatternGraph *pattern_graph_ = nullptr;
     bool standalone_ = false;
     bool summary_ = false;
+
+    void _SetViewInfs(std::string view_path){
+        #include <fstream>
+        #include <nlohmann/json.hpp>
+        // #include "execution_plan/runtime_context.h"
+        // #include "db/galaxy.h"
+        // auto parent_dir=ctx->galaxy_->GetConfig().dir;
+        // if(parent_dir.end()[-1]=='/')parent_dir.pop_back();
+        // std::string file_path="/data/view/"+ctx->graph_+".json";
+        std::ifstream ifs(view_path);
+        nlohmann::json j;
+        try {
+            ifs >> j;
+        } catch (nlohmann::json::parse_error& e) {
+            j = nlohmann::json::array();
+        }
+        ifs.close();
+        for (auto& element : j) {
+            view_names_.emplace(element["view_name"]);
+            view_queries_.emplace(element["query"]);
+        }
+    }
+
+    void ViewMaintenanceCreateEdge(RTContext *ctx,lgraph::EdgeUid edge_uid) {
+        auto txn=ctx->txn_->GetTxn().get();
+        auto label=txn->GetEdgeLabel(edge_uid.lid);
+        // auto label=txn->GetEdgeLabel(edge_uid);
+        if(view_names_.find(label)!=view_names_.end())return;
+
+        auto src_label=txn->GetVertexLabel(edge_uid.src);
+        auto src_primary_field=txn->GetVertexPrimaryField(src_label);
+
+        std::cout<<"View maintenance2"<<std::endl;
+        auto src_primary_value=(ctx->txn_->GetTxn().get()->GetVertexField(edge_uid.src,src_primary_field));
+        bool src_is_string=src_primary_value.IsString();
+
+        auto dst_label=txn->GetVertexLabel(edge_uid.dst);
+        auto dst_primary_field=txn->GetVertexPrimaryField(dst_label);
+
+        std::cout<<"View maintenance3"<<std::endl;
+        auto dst_primary_value=(ctx->txn_->GetTxn().get()->GetVertexField(edge_uid.dst,dst_primary_field));
+        bool dst_is_string=dst_primary_value.IsString();
+        std::tuple<std::string,std::string,std::string,bool> src_info(src_label,src_primary_field,src_primary_value.ToString(),src_is_string);
+        std::tuple<std::string,std::string,std::string,bool> dst_info(dst_label,dst_primary_field,dst_primary_value.ToString(),dst_is_string);  
+        using namespace parser;
+        using namespace antlr4;
+        for(auto view_query:view_queries_){
+            ANTLRInputStream input(view_query);
+            LcypherLexer lexer(&input);
+            CommonTokenStream tokens(&lexer);
+            // std::cout <<"parser s1"<<std::endl; // de
+            LcypherParser parser(&tokens);
+            VarlenUnfoldVisitor visitor(parser.oC_Cypher());
+            auto unfold_queries=visitor.GetRewriteQueries();
+            for(auto unfold_auery:unfold_queries){
+                ANTLRInputStream input(unfold_auery);
+                LcypherLexer lexer(&input);
+                CommonTokenStream tokens(&lexer);
+                // std::cout <<"parser s1"<<std::endl; // de
+                LcypherParser parser(&tokens);
+                ViewMaintenance visitor(parser.oC_Cypher(),label,edge_uid.eid,src_info,dst_info,true);
+                std::cout<<"View maintenance4: "<<std::endl;
+                std::vector<std::string> queries=visitor.GetRewriteQueries();
+                for(auto query:queries){
+                    std::cout<<"View maintenance5: "<<query<<std::endl;
+                    cypher::ElapsedTime temp;
+                    Scheduler scheduler;
+                    // scheduler.Eval(ctx,lgraph_api::GraphQueryType::CYPHER,"match (n) return count(n)",temp);
+                    LOG_DEBUG()<<"in create op txn exist:"<<(ctx->txn_!=nullptr);
+                    scheduler.EvalCypherWithoutNewTxn(ctx,query,temp);
+                    std::cout<<"View maintenance6: "<<std::endl; 
+                }
+            }
+        }
+    }
 
     void ExtractProperties(RTContext *ctx, const parser::TUP_PROPERTIES &properties,
                            VEC_STR &fields, std::vector<lgraph::FieldData> &values) {
@@ -61,6 +140,10 @@ class OpCreate : public OpBase {
         auto &properties = std::get<2>(node_pattern);
         if (node_labels.empty())
             throw lgraph::EvaluationException("vertex label missing in create.");
+        // cypher::ElapsedTime temp;
+        // Scheduler scheduler;
+        // // scheduler.Eval(ctx,lgraph_api::GraphQueryType::CYPHER,"match (n) return count(n)",temp);
+        // scheduler.EvalCypher(ctx,"match (n) return count(n)",temp,false);
         const std::string &label = *node_labels.begin();
         VEC_STR fields;
         std::vector<lgraph::FieldData> values;
@@ -134,9 +217,11 @@ class OpCreate : public OpBase {
                 record->values[it->second.id].relationship = relp;
             }
         }
+        ViewMaintenanceCreateEdge(ctx,euid);
     }
 
     void CreateVE(RTContext *ctx) {
+        LOG_DEBUG()<<"Create VE start";
         for (auto &pattern : create_data_) {
             for (auto &pattern_part : pattern) {
                 auto pp_variable = std::get<0>(pattern_part);
@@ -165,6 +250,7 @@ class OpCreate : public OpBase {
             }  // for pattern_part
         }
         ctx->txn_->GetTxn()->RefreshIterators();
+        LOG_DEBUG()<<"Create VE end";
     }
 
     void ResultSummary(RTContext *ctx) {
@@ -186,10 +272,32 @@ class OpCreate : public OpBase {
     }
 
  public:
+    std::string view_path_;
+    std::set<std::string> view_names_;
+    std::set<std::string> view_queries_;
+
     OpCreate(const parser::QueryPart *stmt, PatternGraph *pattern_graph)
         : OpBase(OpType::CREATE, "Create"),
           sym_tab_(pattern_graph->symbol_table),
           pattern_graph_(pattern_graph) {
+        for (auto &node : pattern_graph_->GetNodes()) {
+            if (node.derivation_ == Node::CREATED) modifies.emplace_back(node.Alias());
+            for (auto rr : node.RhsRelps()) {
+                auto &r = pattern_graph_->GetRelationship(rr);
+                if (r.derivation_ == Relationship::CREATED) modifies.emplace_back(r.Alias());
+            }
+        }
+        for (auto c : stmt->create_clause) {
+            create_data_.emplace_back(*c);
+        }
+    }
+
+    OpCreate(const parser::QueryPart *stmt, PatternGraph *pattern_graph, std::string view_path)
+        : OpBase(OpType::CREATE, "Create"),
+          sym_tab_(pattern_graph->symbol_table),
+          pattern_graph_(pattern_graph),
+          view_path_(view_path) {
+        _SetViewInfs(view_path_);
         for (auto &node : pattern_graph_->GetNodes()) {
             if (node.derivation_ == Node::CREATED) modifies.emplace_back(node.Alias());
             for (auto rr : node.RhsRelps()) {

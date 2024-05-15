@@ -95,12 +95,12 @@ bool Transaction::IsIndexed(const std::string& label, const std::string& field) 
 }
 
 void Transaction::EnterTxn() {
-    if (LightningGraph::InTransaction()) {
-        THROW_CODE(InternalError,
-            "Nested transaction is forbidden. "
-            "Note that db.AddLabel/AddVertexIndex should NOT be used inside a "
-            "transaction.");
-    }
+    // if (LightningGraph::InTransaction()) {
+    //     THROW_CODE(InternalError,
+    //         "Nested transaction is forbidden. "
+    //         "Note that db.AddLabel/AddVertexIndex should NOT be used inside a "
+    //         "transaction.");
+    // }
     LightningGraph::InTransaction() = true;
 }
 
@@ -391,6 +391,7 @@ void Transaction::Abort() {
 }
 
 void Transaction::DeleteVertex(graph::VertexIterator& it, size_t* n_in, size_t* n_out) {
+    // LOG_DEBUG() << "Delete vertex in transcation.cpp: " << it.GetId();
     if (n_in) *n_in = 0;
     if (n_out) *n_out = 0;
     // check if there is blob
@@ -398,11 +399,13 @@ void Transaction::DeleteVertex(graph::VertexIterator& it, size_t* n_in, size_t* 
     FMA_DBG_ASSERT(prop.IsSlice());
     auto vid = it.GetId();
     auto schema = curr_schema_->v_schema_manager.GetSchema(prop);
+    // LOG_DEBUG() << "Delete vertex in transcation.cpp2 " << it.GetId();
     if (schema->DetachProperty()) {
         prop = schema->GetDetachedVertexProperty(*txn_, vid);
     }
     if (schema->HasBlob()) DeleteBlobs(prop, schema, blob_manager_, *txn_);
     schema->DeleteVertexIndex(*txn_, vid, prop);
+    // LOG_DEBUG() << "Delete vertex in transcation.cpp 3 " << it.GetId();
     auto on_edge_deleted = [&](bool is_out_edge, const graph::EdgeValue& edge_value){
         if (is_out_edge) {
             if (n_out) {
@@ -413,12 +416,14 @@ void Transaction::DeleteVertex(graph::VertexIterator& it, size_t* n_in, size_t* 
                 *n_in += edge_value.GetEdgeCount();
             }
         }
-
+        // LOG_DEBUG() << "Delete vertex in transcation.cpp 4 " << it.GetId();
         for (size_t i = 0; i < edge_value.GetEdgeCount(); i++) {
             const auto& data = edge_value.GetNthEdgeData(i);
             auto edge_schema = curr_schema_->e_schema_manager.GetSchema(data.lid);
             FMA_ASSERT(edge_schema);
+            // LOG_DEBUG() << "Delete vertex in transcation.cpp 5 " << it.GetId();
             if (is_out_edge) {
+                // LOG_DEBUG() << "Delete vertex in transcation.cpp 6 1 " << it.GetId();
                 Value property(data.prop, data.psize);
                 if (edge_schema->DetachProperty()) {
                     property = edge_schema->GetDetachedEdgeProperty(
@@ -431,7 +436,9 @@ void Transaction::DeleteVertex(graph::VertexIterator& it, size_t* n_in, size_t* 
                     edge_schema->DeleteEdgeFullTextIndex(
                         {vid, data.vid, data.lid, data.tid, data.eid}, fulltext_buffers_);
                 }
+                // LOG_DEBUG() << "Delete vertex in transcation.cpp 7 1 " << it.GetId();
             } else {
+                // LOG_DEBUG() << "Delete vertex in transcation.cpp 6 2 " << it.GetId();
                 if (vid == data.vid) {
                     // The in edge directing to self is already included in the out edges
                     // skip to avoid double deleting
@@ -449,18 +456,22 @@ void Transaction::DeleteVertex(graph::VertexIterator& it, size_t* n_in, size_t* 
                     edge_schema->DeleteEdgeFullTextIndex(
                         {data.vid, vid, data.lid, data.tid, data.eid}, fulltext_buffers_);
                 }
+                // LOG_DEBUG() << "Delete vertex in transcation.cpp 7 2 " << it.GetId();
             }
         }
     };
+    // LOG_DEBUG() << "Delete vertex in transcation.cpp 8 " << it.GetId();
     graph_->DeleteVertex(*txn_, it, on_edge_deleted);
     if (schema->DetachProperty()) {
         schema->DeleteDetachedVertexProperty(*txn_, vid);
     }
+    // LOG_DEBUG() << "Delete vertex in transcation.cpp 9 " << it.GetId();
     vertex_delta_count_[schema->GetLabelId()]--;
     // delete vertex fulltext index
     if (fulltext_index_) {
         schema->DeleteVertexFullTextIndex(vid, fulltext_buffers_);
     }
+    LOG_DEBUG() << "Delete vertex in transcation.cpp end: " << it.GetId();
 }
 
 /**
@@ -474,9 +485,11 @@ void Transaction::DeleteVertex(graph::VertexIterator& it, size_t* n_in, size_t* 
  */
 
 bool Transaction::DeleteVertex(VertexId vid, size_t* n_in, size_t* n_out) {
+    // LOG_DEBUG() << "Delete vertex in transcation.cpp using vid: " << vid;
     _detail::CheckVid(vid);
     auto vit = graph_->GetVertexIterator(this, vid);
     if (!vit.IsValid()) return false;
+    // LOG_DEBUG() << "Delete vertex in transcation.cpp using vid 2: " << vid;
     DeleteVertex(vit, n_in, n_out);
     return true;
 }

@@ -243,12 +243,18 @@ class OptRewriteWithSchemaInference : public OptPass {
             // Skip optimization when the graph name is empty.
             return 0;
         }
-        _ctx->ac_db_ = std::make_unique<lgraph::AccessControlledDB>(
-            _ctx->galaxy_->OpenGraph(_ctx->user_, _ctx->graph_));
-        lgraph_api::GraphDB db(_ctx->ac_db_.get(), true);
-        _ctx->txn_ = std::make_unique<lgraph_api::Transaction>(db.CreateReadTxn());
-        const lgraph::SchemaInfo *schema_info = &_ctx->txn_->GetTxn()->GetSchemaInfo();
-        _ctx->txn_.reset(nullptr);
+        const lgraph::SchemaInfo *schema_info;
+        if(_ctx->txn_!=nullptr){
+            schema_info = &_ctx->txn_->GetTxn()->GetSchemaInfo();
+        }
+        else{
+            _ctx->ac_db_ = std::make_unique<lgraph::AccessControlledDB>(
+                _ctx->galaxy_->OpenGraph(_ctx->user_, _ctx->graph_));
+            lgraph_api::GraphDB db(_ctx->ac_db_.get(), true);
+            _ctx->txn_ = std::make_unique<lgraph_api::Transaction>(db.CreateReadTxn());
+            schema_info = &_ctx->txn_->GetTxn()->GetSchemaInfo();
+            _ctx->txn_.reset(nullptr);
+        }
         _RewriteWithSchemaInference(root, schema_info);
         return 0;
     }

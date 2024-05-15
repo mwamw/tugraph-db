@@ -519,9 +519,11 @@ void ExecutionPlan::_BuildExpandOps(const parser::QueryPart &part, PatternGraph 
      */
     for (auto &n : pattern_graph.GetNodes()) {
         auto &prop = n.Prop();
-        if (n.derivation_ != Node::CREATED && prop.type == Property::VARIABLE) {
-            auto it = pattern_graph.symbol_table.symbols.find(prop.value_alias);
-            CYPHER_THROW_ASSERT(it != pattern_graph.symbol_table.symbols.end());
+        if (n.derivation_ != Node::CREATED && (prop.type == Property::VARIABLE || prop.type == Property::VALUE)) {
+            if(prop.type == Property::VARIABLE){
+                auto it = pattern_graph.symbol_table.symbols.find(prop.value_alias);
+                CYPHER_THROW_ASSERT(it != pattern_graph.symbol_table.symbols.end());
+            }
             start_nodes.emplace_back(n.ID());
         }
     }
@@ -753,7 +755,7 @@ void ExecutionPlan::_BuildInQueryCallOp(const parser::QueryPart &part,
 
 void ExecutionPlan::_BuildCreateOp(const parser::QueryPart &part,
                                    cypher::PatternGraph &pattern_graph, cypher::OpBase *&root) {
-    OpBase *create = new OpCreate(&part, &pattern_graph);
+    OpBase *create = new OpCreate(&part, &pattern_graph,_view_path);
     _UpdateStreamRoot(create, root);
 }
 
@@ -765,7 +767,7 @@ void ExecutionPlan::_BuildMergeOp(const parser::QueryPart &part,
 
 void ExecutionPlan::_BuildDeleteOp(const parser::QueryPart &part,
                                    cypher::PatternGraph &pattern_graph, cypher::OpBase *&root) {
-    OpBase *del = new OpDelete(&part, &pattern_graph);
+    OpBase *del = new OpDelete(&part, &pattern_graph, _view_path);
     _UpdateStreamRoot(del, root);
 }
 
@@ -1161,6 +1163,10 @@ static OpBase *_Connect(OpBase *lhs, OpBase *rhs, PatternGraph *pattern_graph) {
         std::vector<OpBase *> args;  // argument operations
         _StreamArgs(rhs, args);
         if (!args.empty()) {
+            for(auto arg:args){
+                std::cout<<arg->ToString()<<std::endl;
+                std::cout<<arg->type<<std::endl;
+            }
             if (args.size() > 1) CYPHER_TODO();
             connection = new Apply(dynamic_cast<Argument *>(args[0]), pattern_graph);
         } else {
@@ -1352,7 +1358,7 @@ int ExecutionPlan::Execute(RTContext *ctx) {
                 std::make_unique<lgraph_api::Transaction>(db.CreateWriteTxn(ctx->optimistic_));
         }
     }
-
+    LOG_DEBUG()<<"execute txn exist:"<<(ctx->txn_!=nullptr);
     ctx->result_info_ = std::make_unique<ResultInfo>(GetResultInfo());
     std::vector<std::pair<std::string, lgraph_api::LGraphType>> header;
 
@@ -1373,7 +1379,7 @@ int ExecutionPlan::Execute(RTContext *ctx) {
         auto session = (bolt::BoltSession*)ctx->bolt_conn_->GetContext();
         session->state = bolt::SessionState::STREAMING;
     }
-
+    LOG_DEBUG()<<"execution plan before consume";
     try {
         OpBase::OpResult res;
         do {
@@ -1408,6 +1414,103 @@ int ExecutionPlan::Execute(RTContext *ctx) {
 
     ctx->txn_.reset(nullptr);
     ctx->ac_db_.reset(nullptr);
+#ifndef NDEBUG
+    std::thread::id out_id = std::this_thread::get_id();  // check if tid changes in this function
+    if (entry_id != out_id) LOG_DEBUG() << "switch thread from: " << entry_id << " to " << out_id;
+#endif
+    return 0;
+}
+
+int ExecutionPlan::ExecuteWithoutNewTxn(RTContext *ctx) {
+    // check input
+    LOG_DEBUG()<<"execute wo s";
+    std::string msg;
+#ifndef NDEBUG
+    std::thread::id entry_id = std::this_thread::get_id();  // check if tid changes in this function
+#endif
+    // if (!ctx->Check(msg)) throw lgraph::CypherException(msg);
+    // instantiate db, transaction
+
+    size_t memory_limit = ctx->galaxy_->GetUserMemoryLimit(ctx->user_, ctx->user_);
+    AllocatorManager.BindTid(ctx->user_);
+    AllocatorManager.SetMemoryLimit(memory_limit);
+
+    if (ctx->graph_.empty()) {
+        ctx->ac_db_.reset(nullptr);
+    } else {
+        // We have already created ctx->ac_db_ in opt_rewrite_with_schema_inference.h
+        if (!ctx->ac_db_) {
+            ctx->ac_db_ = std::make_unique<lgraph::AccessControlledDB>(
+                ctx->galaxy_->OpenGraph(ctx->user_, ctx->graph_));
+        }
+        LOG_DEBUG()<<"execute wo txn exist:"<<(ctx->txn_!=nullptr);
+        if(!ctx->txn_){
+            lgraph_api::GraphDB db(ctx->ac_db_.get(), ReadOnly());
+            if (ReadOnly()) {
+                ctx->txn_ = std::make_unique<lgraph_api::Transaction>(db.CreateReadTxn());
+            } else {
+                ctx->txn_ =
+                    std::make_unique<lgraph_api::Transaction>(db.CreateWriteTxn(ctx->optimistic_));
+            }
+        }
+    }
+    LOG_DEBUG()<<"execute wo 2";
+    ctx->result_info_ = std::make_unique<ResultInfo>(GetResultInfo());
+    std::vector<std::pair<std::string, lgraph_api::LGraphType>> header;
+
+    for (auto &h : ctx->result_info_->header.colums) {
+        std::pair<std::string, lgraph_api::LGraphType> column;
+        column.first = h.alias.empty() ? h.name : h.alias;
+        column.second = h.type;
+        header.emplace_back(column);
+    }
+    ctx->result_ = std::make_unique<lgraph_api::Result>(lgraph_api::Result(header));
+
+    if (ctx->bolt_conn_) {
+        std::unordered_map<std::string, std::any> meta;
+        meta["fields"] = ctx->result_->BoltHeader();
+        bolt::PackStream ps;
+        ps.AppendSuccess(meta);
+        ctx->bolt_conn_->PostResponse(std::move(ps.MutableBuffer()));
+        auto session = (bolt::BoltSession*)ctx->bolt_conn_->GetContext();
+        session->state = bolt::SessionState::STREAMING;
+    }
+    LOG_DEBUG()<<"execute wo 3 bolt_conn: "<<ctx->bolt_conn_;
+    try {
+        OpBase::OpResult res;
+        do {
+            res = _root->Consume(ctx);
+            LOG_DEBUG() << "Consume result: "<<res;
+#ifndef NDEBUG
+            LOG_DEBUG() << "root op result: " << res << " (" << OpBase::OP_OK << " for OK)";
+#endif
+        } while (res == OpBase::OP_OK);
+        Reset();
+    } catch (std::exception &e) {
+        // clear ctx
+        ctx->txn_.reset(nullptr);
+        ctx->ac_db_.reset(nullptr);
+        throw;
+    }
+    // finialize, clean db, transaction
+    // if (ctx->txn_) {
+    //     if (!ReadOnly() && ctx->optimistic_) {
+    //         try {
+    //             ctx->txn_->Commit();
+    //         } catch (std::exception &e) {
+    //             ctx->txn_ = nullptr;
+    //             std::string err = "Optimistic transaction commit failed: ";
+    //             err.append(e.what());
+    //             throw lgraph::TxnCommitException(err);
+    //         }
+    //     } else {
+    //         ctx->txn_->Commit();
+    //     }
+    // }
+    // // clear ctx
+
+    // ctx->txn_.reset(nullptr);
+    // ctx->ac_db_.reset(nullptr);
 #ifndef NDEBUG
     std::thread::id out_id = std::this_thread::get_id();  // check if tid changes in this function
     if (entry_id != out_id) LOG_DEBUG() << "switch thread from: " << entry_id << " to " << out_id;

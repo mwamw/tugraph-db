@@ -118,6 +118,8 @@ class ExecutionPlan {
 
     int Execute(RTContext *ctx);
 
+    int ExecuteWithoutNewTxn(RTContext *ctx);
+
     std::string DumpPlan(int indent, bool statistics) const;
 
     std::string DumpGraph() const;  // dump pattern graph
