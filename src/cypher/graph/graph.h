@@ -133,6 +133,11 @@ class PatternGraph {
                            parser::LinkDirection direction, const std::string &alias, int min_hop,
                            int max_hop, Relationship::Derivation derivation);
 
+    RelpID AddRelationship(const std::set<std::string> &types, NodeID lhs, NodeID rhs,
+                           parser::LinkDirection direction, const std::string &alias,
+                           int min_hop, int max_hop,
+                           Relationship::Derivation derivation, bool no_duplicate_edge);
+
     RelpID AddRelationship(Relationship *relp) {
         return AddRelationship(relp->Types(), relp->Lhs(), relp->Rhs(), relp->direction_,
                                relp->Alias(), relp->MinHop(), relp->MaxHop(), relp->derivation_);

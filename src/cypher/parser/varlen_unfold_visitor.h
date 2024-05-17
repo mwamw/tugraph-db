@@ -166,7 +166,7 @@ class VarlenUnfoldVisitor : public LcypherVisitor {
         if(ctx->oC_ReadingClause(0)->oC_Match()==nullptr)
             // throw ("no match clause");
             throw lgraph::CypherException("no match clause");
-        std::cout<<"match s"<<std::endl;
+        std::cout<<"varlen unfold match s"<<std::endl;
         std::vector<std::string> match_queries=std::any_cast<std::vector<std::string>>(visit(ctx->oC_ReadingClause(0)->oC_Match()));
         std::cout<<"match s"<<std::endl;
         std::string oc_with=std::any_cast<std::string>(visit(ctx->oC_With(0)));

@@ -48,7 +48,7 @@ class Scheduler {
               ElapsedTime &elapsed);
     void EvalCypher(RTContext *ctx, const std::string &script, ElapsedTime &elapsed);
     // void EvalCypher(RTContext *ctx, const std::string &script, ElapsedTime &elapsed, bool update_view);
-    void EvalCypherWithoutNewTxn(RTContext *ctx, const std::string &script, ElapsedTime &elapsed);
+    const std::string EvalCypherWithoutNewTxn(RTContext *ctx, const std::string &script, ElapsedTime &elapsed);
     
     static bool DetermineReadOnly(cypher::RTContext *ctx,
                                   const lgraph_api::GraphQueryType &query_type,

@@ -155,6 +155,7 @@ class CypherBaseVisitor : public LcypherVisitor {
     std::any visitOC_Statement(LcypherParser::OC_StatementContext *ctx) override {
         _cmd_type = ctx->EXPLAIN()   ? CmdType::EXPLAIN
                     : ctx->PROFILE() ? CmdType::PROFILE
+                    : ctx->OPTIMIZE() ? CmdType::OPTIMIZE
                     : ctx->oC_View() ? CmdType::VIEW
                                      : CmdType::QUERY;
         LOG_DEBUG() << "parser cmd type: "<<_cmd_type;
@@ -871,6 +872,7 @@ class CypherBaseVisitor : public LcypherVisitor {
         VEC_STR relationship_types;
         std::array<int, 2> range_literal{-1, -1};
         TUP_PROPERTIES properties;
+        bool no_duplicate_edge=false;
         if (ctx->oC_Variable() != nullptr) {
             std::string tmp = std::any_cast<std::string>(visit(ctx->oC_Variable()));
             variable = tmp;
@@ -891,8 +893,11 @@ class CypherBaseVisitor : public LcypherVisitor {
             TUP_PROPERTIES tmp = std::any_cast<TUP_PROPERTIES>(visit(ctx->oC_Properties()));
             properties = tmp;
         }
+        if(ctx->NO_DUPLICATE_EDGE()!=nullptr){
+            no_duplicate_edge=true;
+        }
         AddSymbol(variable, cypher::SymbolNode::RELATIONSHIP, cypher::SymbolNode::LOCAL);
-        return std::make_tuple(variable, relationship_types, range_literal, properties);
+        return std::make_tuple(variable, relationship_types, range_literal, properties,no_duplicate_edge);
     }
 
     std::any visitOC_Properties(LcypherParser::OC_PropertiesContext *ctx) override {

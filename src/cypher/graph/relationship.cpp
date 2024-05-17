@@ -24,18 +24,19 @@ Relationship::Relationship() : id_(-1), derivation_(UNKNOWN) {}
 
 Relationship::Relationship(RelpID id, const std::set<std::string> &types, NodeID lhs, NodeID rhs,
                            parser::LinkDirection direction, const std::string &alias,
-                           Derivation derivation)
+                           Derivation derivation, bool no_duplicate_edge)
     : id_(id),
       types_(types),
       lhs_(lhs),
       rhs_(rhs),
       alias_(alias),
       direction_(direction),
-      derivation_(derivation) {}
+      derivation_(derivation),
+      no_duplicate_edge_(no_duplicate_edge) {}
 
 Relationship::Relationship(RelpID id, const std::set<std::string> &types, NodeID src, NodeID dst,
                            parser::LinkDirection direction, const std::string &alias, int min_hop,
-                           int max_hop, Derivation derivation)
+                           int max_hop, Derivation derivation, bool no_duplicate_edge)
     : id_(id),
       types_(types),
       lhs_(src),
@@ -44,7 +45,8 @@ Relationship::Relationship(RelpID id, const std::set<std::string> &types, NodeID
       direction_(direction),
       derivation_(derivation),
       min_hop_(min_hop),
-      max_hop_(max_hop) {
+      max_hop_(max_hop),
+      no_duplicate_edge_(no_duplicate_edge) {
     its_.resize(max_hop_ < 0 ? 0 : max_hop_);
 }
 

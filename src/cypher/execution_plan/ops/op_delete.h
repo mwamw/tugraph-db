@@ -79,7 +79,12 @@ class OpDelete : public OpBase {
             VarlenUnfoldVisitor visitor(parser.oC_Cypher());
             auto unfold_queries=visitor.GetRewriteQueries();
             for(auto unfold_auery:unfold_queries){
-                ANTLRInputStream input(unfold_auery);
+                // schema重写优化
+                cypher::ElapsedTime temp;
+                Scheduler scheduler;
+                auto new_unfold_query=scheduler.EvalCypherWithoutNewTxn(ctx,"optimize "+unfold_auery,temp);
+                //获得视图更新语句
+                ANTLRInputStream input(new_unfold_query);
                 LcypherLexer lexer(&input);
                 CommonTokenStream tokens(&lexer);
                 // std::cout <<"parser s1"<<std::endl; // de
@@ -132,7 +137,12 @@ class OpDelete : public OpBase {
             VarlenUnfoldVisitor visitor(parser.oC_Cypher());
             auto unfold_queries=visitor.GetRewriteQueries();
             for(auto unfold_auery:unfold_queries){
-                ANTLRInputStream input(unfold_auery);
+                // schema重写优化
+                cypher::ElapsedTime temp;
+                Scheduler scheduler;
+                auto new_unfold_query=scheduler.EvalCypherWithoutNewTxn(ctx,"optimize "+unfold_auery,temp);
+                //获得视图更新语句
+                ANTLRInputStream input(new_unfold_query);
                 LcypherLexer lexer(&input);
                 CommonTokenStream tokens(&lexer);
                 // std::cout <<"parser s1"<<std::endl; // de

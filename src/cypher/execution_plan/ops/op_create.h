@@ -87,7 +87,12 @@ class OpCreate : public OpBase {
             VarlenUnfoldVisitor visitor(parser.oC_Cypher());
             auto unfold_queries=visitor.GetRewriteQueries();
             for(auto unfold_auery:unfold_queries){
-                ANTLRInputStream input(unfold_auery);
+                // schema重写优化
+                cypher::ElapsedTime temp;
+                Scheduler scheduler;
+                auto new_unfold_query=scheduler.EvalCypherWithoutNewTxn(ctx,"optimize "+unfold_auery,temp);
+                //获得视图更新语句
+                ANTLRInputStream input(new_unfold_query);
                 LcypherLexer lexer(&input);
                 CommonTokenStream tokens(&lexer);
                 // std::cout <<"parser s1"<<std::endl; // de
@@ -221,7 +226,7 @@ class OpCreate : public OpBase {
     }
 
     void CreateVE(RTContext *ctx) {
-        LOG_DEBUG()<<"Create VE start";
+        // LOG_DEBUG()<<"Create VE start";
         for (auto &pattern : create_data_) {
             for (auto &pattern_part : pattern) {
                 auto pp_variable = std::get<0>(pattern_part);
@@ -250,7 +255,7 @@ class OpCreate : public OpBase {
             }  // for pattern_part
         }
         ctx->txn_->GetTxn()->RefreshIterators();
-        LOG_DEBUG()<<"Create VE end";
+        // LOG_DEBUG()<<"Create VE end";
     }
 
     void ResultSummary(RTContext *ctx) {

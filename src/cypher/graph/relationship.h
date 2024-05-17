@@ -44,15 +44,16 @@ class Relationship {
     } derivation_ = UNKNOWN;
     int min_hop_ = -1, max_hop_ = -1;  // for variable length relationship
     Path path_;                        // for variable length relationship
+    bool no_duplicate_edge_ = false;
 
     Relationship();
 
     Relationship(RelpID id, const std::set<std::string> &types, NodeID lhs, NodeID rhs,
-                 parser::LinkDirection direction, const std::string &alias, Derivation derivation);
+                 parser::LinkDirection direction, const std::string &alias, Derivation derivation, bool no_duplicate_edge);
 
     Relationship(RelpID id, const std::set<std::string> &types, NodeID src, NodeID dst,
                  parser::LinkDirection direction, const std::string &alias, int min_hop,
-                 int max_hop, Derivation derivation);
+                 int max_hop, Derivation derivation, bool no_duplicate_edge);
 
     Relationship(Relationship &&) = default;
 

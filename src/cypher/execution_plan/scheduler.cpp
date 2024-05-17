@@ -30,6 +30,7 @@
 #include "parser/cypher_base_visitor.h"
 #include "parser/cypher_error_listener.h"
 #include "parser/rewrite_views_visitor.h"
+#include "parser/parse_tree_to_cypher_visitor.h"
 
 #include "cypher/execution_plan/execution_plan.h"
 #include "cypher/execution_plan/scheduler.h"
@@ -260,7 +261,7 @@ void AddElement(std::string file_path, std::string view_name, std::string start_
 //     elapsed.t_exec = elapsed.t_total - elapsed.t_compile;
 // }
 
-void Scheduler::EvalCypherWithoutNewTxn(RTContext *ctx, const std::string &script, ElapsedTime &elapsed) {
+const std::string Scheduler::EvalCypherWithoutNewTxn(RTContext *ctx, const std::string &script, ElapsedTime &elapsed) {
     LOG_DEBUG()<<"EvalCypherWithoutNewTxn txn exist:"<<(ctx->txn_!=nullptr);
     using namespace parser;
     using namespace antlr4;
@@ -307,6 +308,19 @@ void Scheduler::EvalCypherWithoutNewTxn(RTContext *ctx, const std::string &scrip
                 header = "@profile";
                 data = plan->DumpGraph();
             }
+            else if(visitor.CommandType() == parser::CmdType::OPTIMIZE) {
+                LOG_DEBUG()<<"optimize start";
+                const std::vector<cypher::PatternGraph>& pattern_graphs=plan->GetPatternGraphs();
+                ParseTreeToCypherVisitor new_visitor(ctx,oc_cypher,pattern_graphs);
+                LOG_DEBUG()<<"optimize end";
+                // ctx->result_info_ = std::make_unique<ResultInfo>();
+                // ctx->result_ = std::make_unique<lgraph::Result>();
+
+                // ctx->result_->ResetHeader({{"@opt_query", lgraph_api::LGraphType::STRING}});
+                // auto r = ctx->result_->MutableRecord();
+                // r->Insert("@opt_query", lgraph::FieldData(new_visitor.GetOptQuery()));
+                return new_visitor.GetOptQuery();
+            }
             else{ //创建视图
                 LOG_DEBUG() << "s";
                 const std::vector<cypher::PatternGraph>& pattern_graphs=plan->GetPatternGraphs();
@@ -342,7 +356,7 @@ void Scheduler::EvalCypherWithoutNewTxn(RTContext *ctx, const std::string &scrip
                 
                 elapsed.t_total = fma_common::GetTime() - t0;
                 LOG_DEBUG() << "end";
-                return;
+                return std::string();
             }
             ctx->result_->ResetHeader({{header, lgraph_api::LGraphType::STRING}});
             auto r = ctx->result_->MutableRecord();
@@ -353,7 +367,7 @@ void Scheduler::EvalCypherWithoutNewTxn(RTContext *ctx, const std::string &scrip
                     session->streaming_msg = session->msgs.Pop(std::chrono::milliseconds(100));
                     if (ctx->bolt_conn_->has_closed()) {
                         LOG_INFO() << "The bolt connection is closed, cancel the op execution.";
-                        return;
+                        return std::string();
                     }
                 }
                 std::unordered_map<std::string, std::any> meta;
@@ -368,7 +382,7 @@ void Scheduler::EvalCypherWithoutNewTxn(RTContext *ctx, const std::string &scrip
                 ps.AppendSuccess();
                 ctx->bolt_conn_->PostResponse(std::move(ps.MutableBuffer()));
             }
-            return;
+            return std::string();
         }
         LOG_DEBUG() << "Plan cache disabled.";
     }
@@ -392,6 +406,7 @@ void Scheduler::EvalCypherWithoutNewTxn(RTContext *ctx, const std::string &scrip
     // if(!plan->ReadOnly())UpdateView(ctx);
     elapsed.t_total = fma_common::GetTime() - t0;
     elapsed.t_exec = elapsed.t_total - elapsed.t_compile;
+    return std::string();
 }
 
 void Scheduler::EvalCypher(RTContext *ctx, const std::string &script, ElapsedTime &elapsed) {
@@ -435,6 +450,16 @@ void Scheduler::EvalCypher(RTContext *ctx, const std::string &script, ElapsedTim
             } else if (plan->CommandType() == parser::CmdType::PROFILE){
                 header = "@profile";
                 data = plan->DumpGraph();
+            } else if(visitor.CommandType() == parser::CmdType::OPTIMIZE) {
+                const std::vector<cypher::PatternGraph>& pattern_graphs=plan->GetPatternGraphs();
+                ParseTreeToCypherVisitor new_visitor(ctx,oc_cypher,pattern_graphs);
+                ctx->result_info_ = std::make_unique<ResultInfo>();
+                ctx->result_ = std::make_unique<lgraph::Result>();
+
+                ctx->result_->ResetHeader({{"@opt_query", lgraph_api::LGraphType::STRING}});
+                auto r = ctx->result_->MutableRecord();
+                r->Insert("@opt_query", lgraph::FieldData(new_visitor.GetOptQuery()));
+                return;
             }
             else{ //创建视图
                 LOG_DEBUG() << "s";

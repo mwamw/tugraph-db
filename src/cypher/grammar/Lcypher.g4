@@ -37,12 +37,15 @@ oC_Cypher : SP? oC_Statement ( SP? ';' )? SP? EOF ;
 oC_Statement : oC_Query
              | EXPLAIN SP? oC_Query
              | PROFILE SP? oC_Query
+             | OPTIMIZE SP? oC_Query
              | oC_View
              ;
 
 EXPLAIN : ( 'E' | 'e' ) ( 'X' | 'x' ) ( 'P' | 'p' ) ( 'L' | 'l' ) ( 'A' | 'a' ) ( 'I' | 'i' ) ( 'N' | 'n' ) ;
 
 PROFILE : ( 'P' | 'p' ) ( 'R' | 'r' ) ( 'O' | 'o' ) ( 'F' | 'f' ) ( 'I' | 'i' ) ( 'L' | 'l' ) ( 'E' | 'e' ) ;
+
+OPTIMIZE : ( 'O' | 'o' ) ( 'P' | 'p' ) ( 'T' | 't' ) ( 'I' | 'i' ) ( 'M' | 'm' ) ( 'I' | 'i' ) ( 'Z' | 'z' ) ( 'E' | 'e' ) ;
 
 oC_Query : oC_RegularQuery
          | oC_StandaloneCall
@@ -227,7 +230,9 @@ oC_RelationshipPattern : ( oC_LeftArrowHead SP? oC_Dash SP? oC_RelationshipDetai
                        | ( oC_Dash SP? oC_RelationshipDetail? SP? oC_Dash )
                        ;
 
-oC_RelationshipDetail : '[' SP? ( oC_Variable SP? )? ( oC_RelationshipTypes SP? )? oC_RangeLiteral? ( oC_Properties SP? )? ']' ;
+oC_RelationshipDetail : '[' SP? ( oC_Variable SP? )? ( oC_RelationshipTypes SP? )? oC_RangeLiteral? ( oC_Properties SP? )? (SP? NO_DUPLICATE_EDGE SP?)? ']' ;
+
+NO_DUPLICATE_EDGE : ( 'N' | 'n' ) ( 'O' | 'o' ) ( 'D' | 'd' ) ( 'U' | 'u' ) ( 'P' | 'p' ) ( 'E' | 'e' ) ( 'D' | 'd' ) ( 'G' | 'g' ) ( 'E' | 'e' ) ;
 
 oC_Properties : oC_MapLiteral
               | oC_Parameter

@@ -235,7 +235,8 @@ class ViewMaintenance : public LcypherVisitor {
         if(_is_create) return visitChildrenToString(ctx);
         else{
             std::string pattern=std::any_cast<std::string>(visit(ctx->oC_Pattern()));
-            std::string result="match "+pattern+" with "+view_variable_+" limit 1 delete "+view_variable_;
+            // std::string result="match "+pattern+" with "+view_variable_+" limit 1 delete "+view_variable_;
+            std::string result="match "+pattern+" delete "+view_variable_;
             return result;
         }
         _LeaveClauseCREATE();
@@ -642,6 +643,27 @@ class ViewMaintenance : public LcypherVisitor {
                 // throw ("view relationship must have a variable");
                 throw lgraph::CypherException("relationship must have a variable");
             view_variable_=std::any_cast<std::string>(visit(ctx->oC_Variable()));
+            if(!_is_create){
+                std::string result;
+                result.append("[");
+                result.append(view_variable_);
+                if(ctx->oC_RelationshipTypes()!=nullptr){
+                    auto relp_types=std::any_cast<std::string>(visit(ctx->oC_RelationshipTypes()));
+                    result.append(relp_types);
+                }
+                if(ctx->oC_RangeLiteral()!=nullptr){
+                    auto range_literal=std::any_cast<std::string>(visit(ctx->oC_RangeLiteral()));
+                    result.append(range_literal);
+                }
+                if(ctx->oC_Properties()!=nullptr){
+                    auto properties=std::any_cast<std::string>(visit(ctx->oC_Properties()));
+                    result.append(properties);
+                }
+                result.append(" NoDupEdge ");
+                result.append("]"); 
+                return result;
+            }
+            else return visitChildrenToString(ctx);
         }
         else if(_InClauseMATCH()){
             if(_change){

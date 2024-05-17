@@ -42,6 +42,7 @@ enum CmdType {
     QUERY,
     EXPLAIN,
     PROFILE,
+    OPTIMIZE,
     VIEW,
 };
 
@@ -58,8 +59,8 @@ typedef std::map<std::string, Expression> MAP_MAP_LITERAL;
 typedef std::tuple<Expression, std::string> TUP_PROPERTIES;
 // variable, node_labels, properties
 typedef std::tuple<std::string, VEC_STR, TUP_PROPERTIES> TUP_NODE_PATTERN;
-// variable, relationship_types, range_literal, properties
-typedef std::tuple<std::string, VEC_STR, std::array<int, 2>, TUP_PROPERTIES>
+// variable, relationship_types, range_literal, properties, no_dulpicate_edge
+typedef std::tuple<std::string, VEC_STR, std::array<int, 2>, TUP_PROPERTIES, bool>
     TUP_RELATIONSHIP_DETAIL;
 // link direction, relationship_detail
 typedef std::tuple<LinkDirection, TUP_RELATIONSHIP_DETAIL> TUP_RELATIONSHIP_PATTERN;

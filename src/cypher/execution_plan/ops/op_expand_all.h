@@ -17,8 +17,21 @@
 //
 #pragma once
 
+#include <unordered_set>
 #include "cypher/execution_plan/ops/op.h"
 #include "filter/filter.h"
+
+struct pair_hash {
+    template <class T1, class T2>
+    std::size_t operator () (const std::pair<T1,T2> &p) const {
+        auto h1 = std::hash<T1>{}(p.first);
+        auto h2 = std::hash<T2>{}(p.second); 
+
+        // Mainly for demonstration purposes, i.e. works but is overly simple
+        // In the real world, use sth. like boost.hash_combine
+        return h1 ^ h2;  
+    }
+};
 
 namespace cypher {
 
@@ -94,7 +107,14 @@ class ExpandAll : public OpBase {
     bool _CheckToSkipEdge(RTContext *ctx) const {
         return eit_->IsValid() &&
                (pattern_graph_->VisitedEdges().Contains(*eit_) || _CheckToSkipEdgeFilter(ctx) ||
-                (expand_into_ && eit_->GetNbr(expand_direction_) != neighbor_->PullVid()));
+                (expand_into_ && eit_->GetNbr(expand_direction_) != neighbor_->PullVid())
+                || _CheckIfDuplicate() );
+    }
+
+    bool _CheckIfDuplicate() const {
+        if(!no_dup_edge){return false;}
+        else return expand_pair_node.find(std::make_pair(start_->PullVid(),eit_->GetNbr(expand_direction_)))
+                        !=expand_pair_node.end();
     }
 
     bool _FilterNeighborLabel(RTContext *ctx) {
@@ -132,6 +152,7 @@ class ExpandAll : public OpBase {
             /* When relationship is undirected, GetNbr() will get src for out_edge_iterator
              * and dst for in_edge_iterator.  */
             neighbor_->PushVid(eit_->GetNbr(expand_direction_));
+
             pattern_graph_->VisitedEdges().Add(*eit_);
             state_ = ExpandAllConsuming;
             _DumpForDebug();
@@ -164,6 +185,8 @@ class ExpandAll : public OpBase {
 
     std::string view_path_;
     std::set<std::string> view_types_;
+    bool no_dup_edge = false;
+    std::unordered_set<std::pair<lgraph::VertexId,lgraph::VertexId>, pair_hash> expand_pair_node;
     /* ExpandAllStates
      * Different states in which ExpandAll can be at. */
     enum ExpandAllState {
@@ -200,6 +223,7 @@ class ExpandAll : public OpBase {
         nbr_rec_idx_ = nit->second.id;
         relp_rec_idx_ = rit->second.id;
         state_ = ExpandAllUninitialized;
+        no_dup_edge = relp_->no_duplicate_edge_;
     }
 
     ExpandAll(PatternGraph *pattern_graph, Node *start, Node *neighbor, Relationship *relp,
@@ -230,6 +254,7 @@ class ExpandAll : public OpBase {
         nbr_rec_idx_ = nit->second.id;
         relp_rec_idx_ = rit->second.id;
         state_ = ExpandAllUninitialized;
+        no_dup_edge = relp_->no_duplicate_edge_;
     }
 
     void PushDownEdgeFilter(std::shared_ptr<lgraph::Filter> edge_filter) {
@@ -266,6 +291,10 @@ class ExpandAll : public OpBase {
             /* Most of the time, the start_it is definitely valid after child's Consume
              * returns OK, except when the child is an OPTIONAL operation.  */
         }
+        if(no_dup_edge && start_->PullVid()>=0 && neighbor_->PullVid()>=0){
+            expand_pair_node.emplace(start_->PullVid(),neighbor_->PullVid());
+            LOG_DEBUG()<<"expand pair:"<<start_->PullVid()<<","<<neighbor_->PullVid();
+        }
         return OP_OK;
     }
 
@@ -281,6 +310,7 @@ class ExpandAll : public OpBase {
         neighbor_->PushVid(-1);
         pattern_graph_->VisitedEdges().Erase(*eit_);
         state_ = ExpandAllUninitialized;
+        expand_pair_node.clear();
         return OP_OK;
     }
 

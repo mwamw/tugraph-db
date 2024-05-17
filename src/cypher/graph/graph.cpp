@@ -140,9 +140,16 @@ RelpID PatternGraph::AddRelationship(const std::set<std::string> &types, NodeID 
                                      parser::LinkDirection direction, const std::string &alias,
                                      int min_hop, int max_hop,
                                      Relationship::Derivation derivation) {
+    return AddRelationship(types, lhs, rhs, direction, alias, min_hop, max_hop, derivation, false);
+}
+
+RelpID PatternGraph::AddRelationship(const std::set<std::string> &types, NodeID lhs, NodeID rhs,
+                                     parser::LinkDirection direction, const std::string &alias,
+                                     int min_hop, int max_hop,
+                                     Relationship::Derivation derivation, bool no_duplicate_edge) {
     RelpID rid = _next_rid;
     _relationships.emplace_back(rid, types, lhs, rhs, direction, alias, min_hop, max_hop,
-                                derivation);
+                                derivation, no_duplicate_edge);
     _relp_map.emplace(alias, rid);
     _next_rid++;
     auto r = GetNode(lhs).AddRelp(rid, true);
@@ -213,11 +220,12 @@ RelpID PatternGraph::BuildRelationship(const parser::TUP_RELATIONSHIP_PATTERN &r
     auto &relp_detail = std::get<1>(relp_pattern);
     auto &relp_types = std::get<1>(relp_detail);
     auto &range = std::get<2>(relp_detail);
+    auto &no_duplicate_edge = std::get<4>(relp_detail);
     // convert vector to set
     std::set<std::string> r_types(relp_types.begin(), relp_types.end());
     auto &relp = GetRelationship(relp_var);
     if (!relp.Empty()) CYPHER_TODO();
-    return AddRelationship(r_types, lhs, rhs, direction, relp_var, range[0], range[1], derivation);
+    return AddRelationship(r_types, lhs, rhs, direction, relp_var, range[0], range[1], derivation, no_duplicate_edge);
 }
 
 std::string PatternGraph::DumpGraph() const {
