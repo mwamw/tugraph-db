@@ -31,6 +31,7 @@
 #include "parser/cypher_error_listener.h"
 #include "parser/rewrite_views_visitor.h"
 #include "parser/parse_tree_to_cypher_visitor.h"
+#include "parser/rewrite_use_views_visitor.h"
 
 #include "cypher/execution_plan/execution_plan.h"
 #include "cypher/execution_plan/scheduler.h"
@@ -261,6 +262,36 @@ void AddElement(std::string file_path, std::string view_name, std::string start_
 //     elapsed.t_exec = elapsed.t_total - elapsed.t_compile;
 // }
 
+const std::string RewriteCypherUseViews(RTContext *ctx,const std::string &script){
+    auto parent_dir=ctx->galaxy_->GetConfig().dir;
+    if(parent_dir.end()[-1]=='/')parent_dir.pop_back();
+    std::string file_path=parent_dir+"/view/"+ctx->graph_+".json";
+    std::ifstream ifs(file_path);
+
+    // 检查文件是否成功打开
+    if (!ifs) {
+        std::cout << "Failed to open file: " << file_path << std::endl;
+        return script;
+    }
+
+    // 使用nlohmann的json库来解析文件
+    nlohmann::json j;
+    try {
+        ifs >> j;
+    } catch (nlohmann::json::parse_error& e) {
+        j = nlohmann::json::array();
+    }
+    for(auto element:j){
+        std::string view_name = element["view_name"];
+        std::string start_node_label = element["start_node_label"];
+        std::string end_node_label = element["end_node_label"];
+        std::string query = element["query"];
+        parser::RewriteUseViewsVisitor visitor(view_name,query,script);
+        return visitor.GetRewriteQuery();
+    }
+    return script;
+}
+
 const std::string Scheduler::EvalCypherWithoutNewTxn(RTContext *ctx, const std::string &script, ElapsedTime &elapsed) {
     LOG_DEBUG()<<"EvalCypherWithoutNewTxn txn exist:"<<(ctx->txn_!=nullptr);
     using namespace parser;
@@ -271,7 +302,8 @@ const std::string Scheduler::EvalCypherWithoutNewTxn(RTContext *ctx, const std::
     thread_local LRUCacheThreadUnsafe<std::string, std::shared_ptr<ExecutionPlan>> tls_plan_cache;
     std::shared_ptr<ExecutionPlan> plan;
     if (!tls_plan_cache.Get(script, plan)) {
-        ANTLRInputStream input(script);
+        auto rewrite_query=RewriteCypherUseViews(ctx,script);
+        ANTLRInputStream input(rewrite_query);
         LcypherLexer lexer(&input);
         CommonTokenStream tokens(&lexer);
         LOG_DEBUG() <<"parser s"<<std::endl; // de
@@ -418,7 +450,8 @@ void Scheduler::EvalCypher(RTContext *ctx, const std::string &script, ElapsedTim
     thread_local LRUCacheThreadUnsafe<std::string, std::shared_ptr<ExecutionPlan>> tls_plan_cache;
     std::shared_ptr<ExecutionPlan> plan;
     if (!tls_plan_cache.Get(script, plan)) {
-        ANTLRInputStream input(script);
+        auto rewrite_query=RewriteCypherUseViews(ctx,script);
+        ANTLRInputStream input(rewrite_query);
         LcypherLexer lexer(&input);
         CommonTokenStream tokens(&lexer);
         LOG_DEBUG() <<"parser s"<<std::endl; // de
