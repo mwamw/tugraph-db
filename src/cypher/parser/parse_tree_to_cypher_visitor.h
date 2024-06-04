@@ -268,6 +268,7 @@ class ParseTreeToCypherVisitor : public LcypherVisitor {
         }
         // There is no need to use oC_NodeLabels()
         auto node = &(pattern_graphs_[curr_pattern_graph].GetNode(variable));
+        LOG_DEBUG()<<"node label:"<<node->Label();
         if (!node->Label().empty()) {
             result.append(":" + node->Label());
         }
@@ -286,17 +287,23 @@ class ParseTreeToCypherVisitor : public LcypherVisitor {
     std::any visitOC_RelationshipPattern(LcypherParser::OC_RelationshipPatternContext *ctx) override {
         std::string result;
         LinkDirection direction;
-
+        if (ctx->oC_LeftArrowHead() != nullptr && ctx->oC_RightArrowHead() == nullptr) {
+            direction = LinkDirection::RIGHT_TO_LEFT;
+        } else if (ctx->oC_RightArrowHead() != nullptr && ctx->oC_LeftArrowHead() == nullptr) {
+            direction = LinkDirection::LEFT_TO_RIGHT;
+        } else {
+            direction = LinkDirection::DIR_NOT_SPECIFIED;
+        }
         std::string relationship_detail;
         if (ctx->oC_RelationshipDetail() != nullptr) {
             auto relp_detail_with_direction = std::any_cast<std::tuple<LinkDirection, std::string>>(
                 visit(ctx->oC_RelationshipDetail()));
-            direction = std::get<0>(relp_detail_with_direction);
+            // direction = std::get<0>(relp_detail_with_direction);
             relationship_detail = std::get<1>(relp_detail_with_direction);
         } else {
             auto alias = GenAnonymousAlias(false);
             auto relp = &(pattern_graphs_[curr_pattern_graph].GetRelationship(alias));
-            direction = relp->direction_;
+            // direction = relp->direction_;
             if (relp->Types().size() > 0) {
                 relationship_detail.append("[:");
                 int i = 0;
@@ -308,6 +315,7 @@ class ParseTreeToCypherVisitor : public LcypherVisitor {
                 relationship_detail.append("]");
             }
         }
+        LOG_DEBUG()<<"direction:"<<direction;
         switch (direction) {
         case LinkDirection::RIGHT_TO_LEFT:
             result.append("<-");

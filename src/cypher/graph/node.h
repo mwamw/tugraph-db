@@ -35,6 +35,7 @@ class Node {
     lgraph::VertexId vid_ = -1;  // the cache vid of iterator
     bool materialized_ = false;
     bool visited_ = false;
+    // bool is_referenced_=false;//是否在别的地方被引用，比如with,return,where子句等
 
  public:
     enum Derivation {
@@ -52,6 +53,29 @@ class Node {
 
     Node(NodeID id, const std::string &label, const std::string &alias, const Property &prop,
          Derivation derivation);
+
+    // Node(NodeID id, const std::string &label, const std::string &alias, Derivation derivation,bool is_referenced);
+
+    // Node(NodeID id, const std::string &label, const std::string &alias, const Property &prop,
+    //      Derivation derivation,bool is_referenced);
+
+    // Node& operator=(Node&& other) noexcept {
+    //     if (this != &other) {
+    //         id_ = std::move(other.id_);
+    //         label_ = std::move(other.label_);
+    //         alias_ = std::move(other.alias_);
+    //         rhs_relps_ = std::move(other.rhs_relps_);
+    //         lhs_relps_ = std::move(other.lhs_relps_);
+    //         property_ = std::move(other.property_);
+    //         it_=std::move(other.it_);
+    //         // it_ = std::move(other.it_);
+    //         vid_ = std::move(other.vid_);
+    //         materialized_ = std::move(other.materialized_);
+    //         visited_ = std::move(other.visited_);
+    //         derivation_ = std::move(other.derivation_);
+    //     }
+    //     return *this;
+    // }
 
     NodeID ID() const;
 
@@ -80,6 +104,8 @@ class Node {
     bool Empty() const;
 
     bool AddRelp(RelpID rid, bool is_rhs_relp);
+
+    bool DeleteRelp(RelpID rid, bool is_rhs_relp);
 
     void Set(const std::string &label, const Property &property);
 

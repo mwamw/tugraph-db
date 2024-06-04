@@ -59,6 +59,22 @@ class Relationship {
 
     Relationship(const Relationship &) = delete;
 
+    Relationship& operator=(Relationship&& other) noexcept {
+        if (this != &other) {
+            id_ = std::move(other.id_);
+            types_ = std::move(other.types_);
+            lhs_ = std::move(other.lhs_);
+            rhs_ = std::move(other.rhs_);
+            alias_ = std::move(other.alias_);
+            direction_ = std::move(other.direction_);
+            derivation_ = std::move(other.derivation_);
+            min_hop_ = std::move(other.min_hop_);
+            max_hop_ = std::move(other.max_hop_);
+            no_duplicate_edge_ = std::move(other.no_duplicate_edge_);
+        }
+        return *this;
+    }
+
     RelpID ID() const;
 
     const std::set<std::string> &Types() const;

@@ -89,8 +89,18 @@ class CypherBaseVisitor : public LcypherVisitor {
         return alias;
     }
 
+    void AddReferenceSymbol(const std::string &symbol_alias){
+        auto &alias_id_map = _query[_curr_query].parts[_curr_part].symbol_table.symbols;
+        if (alias_id_map.find(symbol_alias) != alias_id_map.end()) {
+            LOG_DEBUG()<<"add reference symbol: "<<symbol_alias;
+            LOG_DEBUG()<<"Inclause: "<<_curr_clause_type;
+            alias_id_map[symbol_alias].is_referenced=true;
+        }
+    }
+
     bool AddSymbol(const std::string &symbol_alias, cypher::SymbolNode::Type type,
                    cypher::SymbolNode::Scope scope) {
+        AddReferenceSymbol(symbol_alias);
         if (_InClauseRETURN() ||
             (_InClauseWHERE() && !symbol_alias.empty() && symbol_alias[0] != '$')) {
             // TODO(anyone): more situations
@@ -157,6 +167,7 @@ class CypherBaseVisitor : public LcypherVisitor {
                     : ctx->PROFILE() ? CmdType::PROFILE
                     : ctx->OPTIMIZE() ? CmdType::OPTIMIZE
                     : ctx->oC_View() ? CmdType::VIEW
+                    : ctx->MAINTENANCE() ? CmdType::MAINTENANCE
                                      : CmdType::QUERY;
         LOG_DEBUG() << "parser cmd type: "<<_cmd_type;
         return visitChildren(ctx);
@@ -708,6 +719,8 @@ class CypherBaseVisitor : public LcypherVisitor {
                             : it->second.type;
             AddSymbol(as_variable.empty() ? variable : as_variable, type,
                       cypher::SymbolNode::LOCAL);
+            
+            AddReferenceSymbol(variable);
         }
         return std::make_tuple(expr, as_variable);
     }

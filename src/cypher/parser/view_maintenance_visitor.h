@@ -122,6 +122,7 @@ class ViewMaintenance : public LcypherVisitor {
     // std::string GetViewName() const { return view_name; }
 
     std::any visitOC_Cypher(LcypherParser::OC_CypherContext *ctx) override {
+        LOG_DEBUG()<<"view maintenance cypher:"<<ctx->getText();
         // std::cout <<"Cypher start"<<std::endl;
         // rewrite_query = std::any_cast<std::string>(visit(ctx->oC_Statement()));
         visit(ctx->oC_Statement());
@@ -192,6 +193,7 @@ class ViewMaintenance : public LcypherVisitor {
         for(auto& mq:match_queries){
             mq.append(" "+oc_with);
             mq.append(" "+update);
+            mq="Maintenance "+mq;
             rewrite_queries.push_back(mq);
         }
         return 0;

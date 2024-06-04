@@ -155,7 +155,7 @@ class ExpandAll : public OpBase {
 
             pattern_graph_->VisitedEdges().Add(*eit_);
             state_ = ExpandAllConsuming;
-            _DumpForDebug();
+            // _DumpForDebug();
             return OP_OK;
         }
         // The iterators are set, keep on consuming.
@@ -166,7 +166,7 @@ class ExpandAll : public OpBase {
         if (!eit_->IsValid() || !_FilterNeighborLabel(ctx)) return OP_REFRESH;
         neighbor_->PushVid(eit_->GetNbr(expand_direction_));
         pattern_graph_->VisitedEdges().Add(*eit_);
-        _DumpForDebug();
+        // _DumpForDebug();
         return OP_OK;
     }
 
@@ -262,9 +262,21 @@ class ExpandAll : public OpBase {
     }
 
     OpResult Initialize(RTContext *ctx) override {
+#ifndef NDEBUG
+        LOG_DEBUG()<<"expand init";
+#endif
         CYPHER_THROW_ASSERT(!children.empty());
+#ifndef NDEBUG
+        LOG_DEBUG()<<"expand grand parent size:"<<parent->parent->children.size();
+#endif
         auto child = children[0];
+#ifndef NDEBUG
+        LOG_DEBUG()<<"expand grand parent size3:"<<parent->parent->children.size();
+#endif
         auto res = child->Initialize(ctx);
+#ifndef NDEBUG
+        LOG_DEBUG()<<"expand grand parent size4:"<<parent->parent->children.size();
+#endif
         if (res != OP_OK) return res;
         record = child->record;
         record->values[start_rec_idx_].type = Entry::NODE;
@@ -273,10 +285,17 @@ class ExpandAll : public OpBase {
         record->values[nbr_rec_idx_].node = neighbor_;
         record->values[relp_rec_idx_].type = Entry::RELATIONSHIP;
         record->values[relp_rec_idx_].relationship = relp_;
+#ifndef NDEBUG
+        LOG_DEBUG()<<"expand grand parent size2:"<<parent->parent->children.size();
+        LOG_DEBUG()<<"expand init end";
+#endif
         return OP_OK;
     }
 
     OpResult RealConsume(RTContext *ctx) override {
+#ifndef NDEBUG
+        LOG_DEBUG()<<"expand consume";
+#endif
         CYPHER_THROW_ASSERT(!children.empty());
         auto child = children[0];
         while (state_ == ExpandAllUninitialized || Next(ctx) == OP_REFRESH) {
@@ -293,7 +312,9 @@ class ExpandAll : public OpBase {
         }
         if(no_dup_edge && start_->PullVid()>=0 && neighbor_->PullVid()>=0){
             expand_pair_node.emplace(start_->PullVid(),neighbor_->PullVid());
+#ifndef NDEBUG
             LOG_DEBUG()<<"expand pair:"<<start_->PullVid()<<","<<neighbor_->PullVid();
+#endif
         }
         return OP_OK;
     }

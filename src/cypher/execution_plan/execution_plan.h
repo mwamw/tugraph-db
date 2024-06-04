@@ -41,6 +41,9 @@ class ExecutionPlan {
     // query parts local member
     std::vector<PatternGraph> _pattern_graphs;
     std::string _view_path;
+    std::map<std::string,PatternGraph*> _view_pattern_graphs;
+    bool _is_view_maintenance = false;
+    bool _is_optimize=false;
 
     void _AddScanOp(const parser::QueryPart &part, const SymbolTable *sym_tab, Node *node,
                     std::vector<OpBase *> &ops, bool skip_arg_op);
@@ -87,10 +90,13 @@ class ExecutionPlan {
 
     bool _WorkWithoutTransaction(const parser::SglQuery &stmt) const;
 
+    void GetViewPatternGraphs(cypher::RTContext *ctx);
+
     DISABLE_COPY(ExecutionPlan);
     DISABLE_MOVE(ExecutionPlan);
 
  public:
+
     ExecutionPlan() = default;
 
     ExecutionPlan &Clone(const ExecutionPlan &rhs);
@@ -125,5 +131,8 @@ class ExecutionPlan {
     std::string DumpGraph() const;  // dump pattern graph
 
     const std::vector<PatternGraph>& GetPatternGraphs() const { return _pattern_graphs; }
+
+    void SetMaintenance(bool is_view_maintenance) { _is_view_maintenance = is_view_maintenance; }
+    void SetOptimize(bool is_optimize) { _is_optimize = is_optimize; }
 };
 }  // namespace cypher

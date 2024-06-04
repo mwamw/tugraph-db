@@ -20,6 +20,7 @@
 #include <stack>
 #include "fma-common/utils.h"
 #include "parser/clause.h"
+#include "parser/symbol_table.h"
 #include "cypher/graph/graph.h"
 
 namespace cypher {
@@ -76,8 +77,14 @@ void PatternGraph::_CollectExpandStepsByDFS(NodeID start, bool ignore_created,
 }
 
 Node &PatternGraph::GetNode(NodeID id) {
-    if ((size_t)id >= _nodes.size()) return EmptyNode();
-    return _nodes[id];
+    // if ((size_t)id >= _nodes.size()) return EmptyNode();
+    // return _nodes[id];
+    for(auto &node : _nodes){
+        if(node.ID() == id){
+            return node;
+        }
+    }
+    return EmptyNode();
 }
 
 Node &PatternGraph::GetNode(const std::string &alias) {
@@ -93,13 +100,25 @@ const Node &PatternGraph::GetNode(const std::string &alias) const {
 std::vector<Node> &PatternGraph::GetNodes() { return _nodes; }
 
 Relationship &PatternGraph::GetRelationship(RelpID id) {
-    if ((size_t)id >= _relationships.size()) return EmptyRelationship();
-    return _relationships[id];
+    // if ((size_t)id >= _relationships.size()) return EmptyRelationship();
+    // return _relationships[id];
+    for(auto &relp : _relationships){
+        if(relp.ID() == id){
+            return relp;
+        }
+    }
+    return EmptyRelationship();
 }
 
 const Relationship &PatternGraph::GetRelationship(RelpID id) const {
-    if ((size_t)id >= _relationships.size()) return EmptyRelationship();
-    return _relationships[id];
+    // if ((size_t)id >= _relationships.size()) return EmptyRelationship();
+    // return _relationships[id];
+    for(auto &relp : _relationships){
+        if(relp.ID() == id){
+            return relp;
+        }
+    }
+    return EmptyRelationship();
 }
 
 Relationship &PatternGraph::GetRelationship(const std::string &alias) {
@@ -115,6 +134,12 @@ const Relationship &PatternGraph::GetRelationship(const std::string &alias) cons
 NodeID PatternGraph::AddNode(const std::string &label, const std::string &alias,
                              Node::Derivation derivation) {
     NodeID nid = _next_nid;
+    // bool is_referenced=false;
+    // if(symbol_table.symbols.find(alias) != symbol_table.symbols.end()){
+    //     is_referenced=symbol_table.symbols[alias].is_referenced;
+    //     // symbol_table.symbols[alias] = node;
+    // }
+    // _nodes.emplace_back(nid, label, alias, derivation,is_referenced);
     _nodes.emplace_back(nid, label, alias, derivation);
     _node_map.emplace(alias, nid);
     _next_nid++;
@@ -124,10 +149,42 @@ NodeID PatternGraph::AddNode(const std::string &label, const std::string &alias,
 NodeID PatternGraph::AddNode(const std::string &label, const std::string &alias,
                              const Property &prop_filter, Node::Derivation derivation) {
     NodeID nid = _next_nid;
+    // bool is_referenced=false;
+    // if(symbol_table.symbols.find(alias) != symbol_table.symbols.end()){
+    //     is_referenced=symbol_table.symbols[alias].is_referenced;
+    //     // symbol_table.symbols[alias] = node;
+    // }
+    // _nodes.emplace_back(nid, label, alias, prop_filter, derivation,is_referenced);
     _nodes.emplace_back(nid, label, alias, prop_filter, derivation);
     _node_map.emplace(alias, nid);
     _next_nid++;
     return nid;
+}
+
+bool PatternGraph::RemoveNode(NodeID node_id) {
+    // 图中的维护(_node_map,_nodes,symbol_table)
+    // 相邻边全部删除
+    for(size_t i=0;i<_nodes.size();i++){
+        if(_nodes[i].ID()==node_id){
+            auto &node=_nodes[i];
+            _node_map.erase(node.Alias());
+            symbol_table.symbols.erase(node.Alias());
+            
+            for(auto &relp_id:node.LhsRelps()){
+                RemoveRelationship(relp_id);
+            }
+            for(auto &relp_id:node.RhsRelps()){
+                RemoveRelationship(relp_id);
+            }
+            // node.Alias()
+            _nodes.erase(_nodes.begin()+i);
+            return true;
+        }
+    }
+    // _nodes.erase(std::remove_if(_nodes.begin(), _nodes.end(),
+    //                         [node_id](const Node& node) { return node.ID() == node_id; }),
+    //          _nodes.end());
+    return false;
 }
 
 RelpID PatternGraph::AddRelationship(const std::set<std::string> &types, NodeID lhs, NodeID rhs,
@@ -157,6 +214,33 @@ RelpID PatternGraph::AddRelationship(const std::set<std::string> &types, NodeID 
     r = GetNode(rhs).AddRelp(rid, false);
     CYPHER_THROW_ASSERT(r);
     return rid;
+}
+
+bool PatternGraph::RemoveRelationship(RelpID relp_id){
+    // 图中的维护(_relp_map,_relationships,symbol_table)
+    // 源点，终点的相邻边集合维护
+    for(size_t i=0;i<_relationships.size();i++){
+        if(_relationships[i].ID()==relp_id){
+            auto &relp=_relationships[i];
+            _relp_map.erase(relp.Alias());
+            symbol_table.symbols.erase(relp.Alias());
+            
+            auto &lhs=GetNode(relp.Lhs());
+            if(!lhs.Empty()){
+                lhs.DeleteRelp(relp_id,true);
+            }
+            auto &rhs=GetNode(relp.Rhs());
+            if(!rhs.Empty()){
+                rhs.DeleteRelp(relp_id,false);
+            }
+            // relp.Src()
+            // node.Alias()
+            _relationships.erase(_relationships.begin()+i);
+            
+            return true;
+        }
+    }
+    return false;
 }
 
 static void ExtractNodePattern(const parser::TUP_NODE_PATTERN &node_pattern, std::string &label) {
@@ -224,20 +308,36 @@ RelpID PatternGraph::BuildRelationship(const parser::TUP_RELATIONSHIP_PATTERN &r
     // convert vector to set
     std::set<std::string> r_types(relp_types.begin(), relp_types.end());
     auto &relp = GetRelationship(relp_var);
+    if(symbol_table.symbols.find(relp_var) == symbol_table.symbols.end()){
+        size_t id=_next_rid;
+        SymbolNode node=SymbolNode(id,SymbolNode::Type::RELATIONSHIP,SymbolNode::Scope::LOCAL);
+        symbol_table.symbols.emplace(relp_var,node);
+        // symbol_table.symbols[relp_var] = node;
+    }
     if (!relp.Empty()) CYPHER_TODO();
     return AddRelationship(r_types, lhs, rhs, direction, relp_var, range[0], range[1], derivation, no_duplicate_edge);
 }
 
 std::string PatternGraph::DumpGraph() const {
+    LOG_DEBUG()<<"Dump start";
     std::string line = "Current Pattern Graph:\n";
+    LOG_DEBUG()<<"node size:";
+    LOG_DEBUG()<<_nodes.size();
     for (auto &n : _nodes) {
+        LOG_DEBUG()<<"node dump:"<<n.Alias();
         auto derivation = n.derivation_ == Node::CREATED    ? "(CREATED)"
                           : n.derivation_ == Node::MERGED   ? "(MERGED)"
                           : n.derivation_ == Node::ARGUMENT ? "(ARGUMENT)"
                                                             : "(MATCHED)";
-        line.append(fma_common::StringFormatter::Format("N[{}] {}:{} {}\n", std::to_string(n.ID()),
-                                                        n.Alias(), n.Label(), derivation));
+        bool is_referenced=false;
+        if(symbol_table.symbols.find(n.Alias()) != symbol_table.symbols.end()){
+            is_referenced=symbol_table.symbols.at(n.Alias()).is_referenced;
+        }
+        line.append(fma_common::StringFormatter::Format("N[{}] {}:{} {} {}\n", std::to_string(n.ID()),
+                                                        n.Alias(), n.Label(), derivation,is_referenced));
+        LOG_DEBUG()<<"node dump end";
     }
+    LOG_DEBUG()<<"node end";
     for (auto &r : _relationships) {
         auto direction = r.direction_ == parser::LEFT_TO_RIGHT   ? "-->"
                          : r.direction_ == parser::RIGHT_TO_LEFT ? "<--"
@@ -247,17 +347,24 @@ std::string PatternGraph::DumpGraph() const {
                           : r.derivation_ == Relationship::MERGED   ? "(MERGED)"
                           : r.derivation_ == Relationship::ARGUMENT ? "(ARGUMENT)"
                                                                     : "(MATCHED)";
+        bool is_referenced=false;
+        if(symbol_table.symbols.find(r.Alias()) != symbol_table.symbols.end()){
+            is_referenced=symbol_table.symbols.at(r.Alias()).is_referenced;
+        }
         line.append(fma_common::StringFormatter::Format(
-            "R[{} {} {}] {}:{} {}\n", std::to_string(r.Lhs()), direction, std::to_string(r.Rhs()),
-            r.Alias(), types, derivation));
+            "R[{} {} {}] {}:{} {} {}\n", std::to_string(r.Lhs()), direction, std::to_string(r.Rhs()),
+            r.Alias(), types, derivation,is_referenced));
     }
+    LOG_DEBUG()<<"relp end";
     for (auto &[symbol, symbol_node] : symbol_table.symbols) {
         line.append(fma_common::StringFormatter::Format(
             "Symbol: [{}] type({}), scope({}), symbol_id({})\n", symbol,
             cypher::SymbolNode::to_string(symbol_node.type),
             cypher::SymbolNode::to_string(symbol_node.scope), symbol_node.id));
     }
+    LOG_DEBUG()<<"symbol end";
     if (_nodes.empty() && _relationships.empty()) line.append("(EMPTY GRAPH)\n");
+    LOG_DEBUG()<<"Dump end";
     return line;
 }
 

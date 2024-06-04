@@ -20,23 +20,24 @@ public:
     T__26 = 27, T__27 = 28, T__28 = 29, T__29 = 30, T__30 = 31, T__31 = 32, 
     T__32 = 33, T__33 = 34, T__34 = 35, T__35 = 36, T__36 = 37, T__37 = 38, 
     T__38 = 39, T__39 = 40, T__40 = 41, T__41 = 42, T__42 = 43, T__43 = 44, 
-    T__44 = 45, EXPLAIN = 46, PROFILE = 47, OPTIMIZE = 48, VIEW = 49, UNION = 50, 
-    ALL = 51, OPTIONAL_ = 52, MATCH = 53, UNWIND = 54, AS = 55, MERGE = 56, 
-    ON = 57, CREATE = 58, SET = 59, DETACH = 60, DELETE_ = 61, REMOVE = 62, 
-    CALL = 63, YIELD = 64, WITH = 65, DISTINCT = 66, RETURN = 67, ORDER = 68, 
-    BY = 69, L_SKIP = 70, LIMIT = 71, ASCENDING = 72, ASC = 73, DESCENDING = 74, 
-    DESC = 75, USING = 76, JOIN = 77, START = 78, WHERE = 79, NO_DUPLICATE_EDGE = 80, 
-    OR = 81, XOR = 82, AND = 83, NOT = 84, IN = 85, STARTS = 86, ENDS = 87, 
-    CONTAINS = 88, REGEXP = 89, IS = 90, NULL_ = 91, COUNT = 92, ANY = 93, 
-    NONE = 94, SINGLE = 95, TRUE_ = 96, FALSE_ = 97, EXISTS = 98, CASE = 99, 
-    ELSE = 100, END = 101, WHEN = 102, THEN = 103, StringLiteral = 104, 
-    EscapedChar = 105, HexInteger = 106, DecimalInteger = 107, OctalInteger = 108, 
-    HexLetter = 109, HexDigit = 110, Digit = 111, NonZeroDigit = 112, NonZeroOctDigit = 113, 
-    OctDigit = 114, ZeroDigit = 115, ExponentDecimalReal = 116, RegularDecimalReal = 117, 
-    FILTER = 118, EXTRACT = 119, UnescapedSymbolicName = 120, CONSTRAINT = 121, 
-    DO = 122, FOR = 123, REQUIRE = 124, UNIQUE = 125, MANDATORY = 126, SCALAR = 127, 
-    OF = 128, ADD = 129, DROP = 130, IdentifierStart = 131, IdentifierPart = 132, 
-    EscapedSymbolicName = 133, SP = 134, WHITESPACE = 135, Comment = 136
+    T__44 = 45, EXPLAIN = 46, PROFILE = 47, OPTIMIZE = 48, MAINTENANCE = 49, 
+    VIEW = 50, UNION = 51, ALL = 52, OPTIONAL_ = 53, MATCH = 54, UNWIND = 55, 
+    AS = 56, MERGE = 57, ON = 58, CREATE = 59, SET = 60, DETACH = 61, DELETE_ = 62, 
+    REMOVE = 63, CALL = 64, YIELD = 65, WITH = 66, DISTINCT = 67, RETURN = 68, 
+    ORDER = 69, BY = 70, L_SKIP = 71, LIMIT = 72, ASCENDING = 73, ASC = 74, 
+    DESCENDING = 75, DESC = 76, USING = 77, JOIN = 78, START = 79, WHERE = 80, 
+    NO_DUPLICATE_EDGE = 81, OR = 82, XOR = 83, AND = 84, NOT = 85, IN = 86, 
+    STARTS = 87, ENDS = 88, CONTAINS = 89, REGEXP = 90, IS = 91, NULL_ = 92, 
+    COUNT = 93, ANY = 94, NONE = 95, SINGLE = 96, TRUE_ = 97, FALSE_ = 98, 
+    EXISTS = 99, CASE = 100, ELSE = 101, END = 102, WHEN = 103, THEN = 104, 
+    StringLiteral = 105, EscapedChar = 106, HexInteger = 107, DecimalInteger = 108, 
+    OctalInteger = 109, HexLetter = 110, HexDigit = 111, Digit = 112, NonZeroDigit = 113, 
+    NonZeroOctDigit = 114, OctDigit = 115, ZeroDigit = 116, ExponentDecimalReal = 117, 
+    RegularDecimalReal = 118, FILTER = 119, EXTRACT = 120, UnescapedSymbolicName = 121, 
+    CONSTRAINT = 122, DO = 123, FOR = 124, REQUIRE = 125, UNIQUE = 126, 
+    MANDATORY = 127, SCALAR = 128, OF = 129, ADD = 130, DROP = 131, IdentifierStart = 132, 
+    IdentifierPart = 133, EscapedSymbolicName = 134, SP = 135, WHITESPACE = 136, 
+    Comment = 137
   };
 
   enum {
@@ -219,6 +220,7 @@ public:
     antlr4::tree::TerminalNode *SP();
     antlr4::tree::TerminalNode *PROFILE();
     antlr4::tree::TerminalNode *OPTIMIZE();
+    antlr4::tree::TerminalNode *MAINTENANCE();
     OC_ViewContext *oC_View();
 
 

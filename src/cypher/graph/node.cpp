@@ -33,6 +33,16 @@ Node::Node(cypher::NodeID id, const std::string &label, const std::string &alias
     property_ = prop;
 }
 
+// Node::Node(cypher::NodeID id, const std::string &label, const std::string &alias,
+//            Derivation derivation,bool is_referenced)
+//     : id_(id), label_(label), alias_(alias), derivation_(derivation), is_referenced_(is_referenced) {}
+
+// Node::Node(cypher::NodeID id, const std::string &label, const std::string &alias,
+//            const Property &prop, Derivation derivation,bool is_referenced)
+//     : Node(id, label, alias, derivation,is_referenced) {
+//     property_ = prop;
+// }
+
 NodeID Node::ID() const { return id_; }
 
 const std::string &Node::Label() const { return label_; }
@@ -66,6 +76,25 @@ bool Node::AddRelp(cypher::RelpID rid, bool is_rhs_relp) {
         lhs_relps_.emplace_back(rid);
     }
     return true;
+}
+
+bool Node::DeleteRelp(cypher::RelpID rid, bool is_rhs_relp) {
+    if (is_rhs_relp) {
+        for (size_t i=0;i<rhs_relps_.size();i++) {
+            if (rhs_relps_[i] == rid) {
+                rhs_relps_.erase(rhs_relps_.begin() + i);
+                return true;
+            }
+        }
+    } else {
+        for (size_t i=0;i<lhs_relps_.size();i++) {
+            if (lhs_relps_[i] == rid) {
+                lhs_relps_.erase(lhs_relps_.begin() + i);
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 void Node::Set(const std::string &label, const cypher::Property &property) {

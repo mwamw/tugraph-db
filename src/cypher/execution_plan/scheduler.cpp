@@ -31,6 +31,7 @@
 #include "parser/cypher_error_listener.h"
 #include "parser/rewrite_views_visitor.h"
 #include "parser/parse_tree_to_cypher_visitor.h"
+#include "parser/rewrite_use_views_visitor.h"
 
 #include "cypher/execution_plan/execution_plan.h"
 #include "cypher/execution_plan/scheduler.h"
@@ -261,35 +262,35 @@ void AddElement(std::string file_path, std::string view_name, std::string start_
 //     elapsed.t_exec = elapsed.t_total - elapsed.t_compile;
 // }
 
-// const std::string RewriteCypherUseViews(RTContext *ctx,const std::string &script){
-//     auto parent_dir=ctx->galaxy_->GetConfig().dir;
-//     if(parent_dir.end()[-1]=='/')parent_dir.pop_back();
-//     std::string file_path=parent_dir+"/view/"+ctx->graph_+".json";
-//     std::ifstream ifs(file_path);
+const std::string RewriteCypherUseViews(RTContext *ctx,const std::string &script){
+    auto parent_dir=ctx->galaxy_->GetConfig().dir;
+    if(parent_dir.end()[-1]=='/')parent_dir.pop_back();
+    std::string file_path=parent_dir+"/view/"+ctx->graph_+".json";
+    std::ifstream ifs(file_path);
 
-//     // 检查文件是否成功打开
-//     if (!ifs) {
-//         std::cout << "Failed to open file: " << file_path << std::endl;
-//         return script;
-//     }
+    // 检查文件是否成功打开
+    if (!ifs) {
+        std::cout << "Failed to open file: " << file_path << std::endl;
+        return script;
+    }
 
-//     // 使用nlohmann的json库来解析文件
-//     nlohmann::json j;
-//     try {
-//         ifs >> j;
-//     } catch (nlohmann::json::parse_error& e) {
-//         j = nlohmann::json::array();
-//     }
-//     for(auto element:j){
-//         std::string view_name = element["view_name"];
-//         std::string start_node_label = element["start_node_label"];
-//         std::string end_node_label = element["end_node_label"];
-//         std::string query = element["query"];
-//         parser::RewriteUseViewsVisitor visitor(view_name,query,script);
-//         return visitor.GetRewriteQuery();
-//     }
-//     return script;
-// }
+    // 使用nlohmann的json库来解析文件
+    nlohmann::json j;
+    try {
+        ifs >> j;
+    } catch (nlohmann::json::parse_error& e) {
+        j = nlohmann::json::array();
+    }
+    for(auto element:j){
+        std::string view_name = element["view_name"];
+        std::string start_node_label = element["start_node_label"];
+        std::string end_node_label = element["end_node_label"];
+        std::string query = element["query"];
+        parser::RewriteUseViewsVisitor visitor(view_name,query,script);
+        return visitor.GetRewriteQuery();
+    }
+    return script;
+}
 
 const std::string Scheduler::EvalCypherWithoutNewTxn(RTContext *ctx, const std::string &script, ElapsedTime &elapsed) {
     LOG_DEBUG()<<"EvalCypherWithoutNewTxn txn exist:"<<(ctx->txn_!=nullptr);
@@ -322,6 +323,10 @@ const std::string Scheduler::EvalCypherWithoutNewTxn(RTContext *ctx, const std::
             LOG_DEBUG() << sql_query.ToString();
         }
         plan = std::make_shared<ExecutionPlan>();
+        if(visitor.CommandType()==parser::CmdType::MAINTENANCE)
+            plan.get()->SetMaintenance(true);
+        else if(visitor.CommandType()==parser::CmdType::OPTIMIZE)
+            plan.get()->SetOptimize(true);
         LOG_DEBUG()<<"EvalCypherWithoutNewTxn txn exist6:"<<(ctx->txn_!=nullptr);
         plan->Build(visitor.GetQuery(), visitor.CommandType(), ctx);
         LOG_DEBUG()<<"EvalCypherWithoutNewTxn txn exist7:"<<(ctx->txn_!=nullptr);
@@ -352,7 +357,7 @@ const std::string Scheduler::EvalCypherWithoutNewTxn(RTContext *ctx, const std::
                 // r->Insert("@opt_query", lgraph::FieldData(new_visitor.GetOptQuery()));
                 return new_visitor.GetOptQuery();
             }
-            else{ //创建视图
+            else if(visitor.CommandType()==parser::CmdType::VIEW){ //创建视图
                 LOG_DEBUG() << "s";
                 const std::vector<cypher::PatternGraph>& pattern_graphs=plan->GetPatternGraphs();
                 LOG_DEBUG() << "new visitor s";
@@ -469,6 +474,10 @@ void Scheduler::EvalCypher(RTContext *ctx, const std::string &script, ElapsedTim
             LOG_DEBUG() << sql_query.ToString();
         }
         plan = std::make_shared<ExecutionPlan>();
+        if(visitor.CommandType()==parser::CmdType::MAINTENANCE)
+            plan.get()->SetMaintenance(true);
+        else if(visitor.CommandType()==parser::CmdType::OPTIMIZE)
+            plan.get()->SetOptimize(true);
         plan->Build(visitor.GetQuery(), visitor.CommandType(), ctx);
         plan->Validate(ctx);
         LOG_DEBUG() << "Command Type" <<plan->CommandType(); // de

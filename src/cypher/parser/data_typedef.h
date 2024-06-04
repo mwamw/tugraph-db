@@ -43,6 +43,7 @@ enum CmdType {
     EXPLAIN,
     PROFILE,
     OPTIMIZE,
+    MAINTENANCE, //视图维护
     VIEW,
 };
 

@@ -66,8 +66,18 @@ OpBase::OpResult Argument::Initialize(RTContext *ctx) {
 
 OpBase::OpResult Argument::RealConsume(RTContext *ctx) {
     if (state == StreamDepleted) return OP_DEPLETED;
+#ifndef NDEBUG 
+    LOG_DEBUG()<<"argument input value:"<<(*input_record_)->ToString();
+#endif
     for (auto &a : args_) {
+#ifndef NDEBUG 
+        LOG_DEBUG()<<"argument.cpp arg alias:"<<a.alias;
+        LOG_DEBUG()<<"argument.cpp arg idx:"<<a.rec_idx;
+#endif
         auto &input = (*input_record_)->values[a.rec_idx];
+        // LOG_DEBUG()<<"argument input value:"<<(*input_record_)->ToString();
+        // LOG_DEBUG()<<"argument input type:"<<input.type;
+        // LOG_DEBUG()<<"argument input:"<<input.ToString();
         int64_t vid = -1;
         switch (input.type) {
         case Entry::CONSTANT:

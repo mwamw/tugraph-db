@@ -38,6 +38,7 @@ oC_Statement : oC_Query
              | EXPLAIN SP? oC_Query
              | PROFILE SP? oC_Query
              | OPTIMIZE SP? oC_Query
+             | MAINTENANCE
              | oC_View
              ;
 
@@ -46,6 +47,8 @@ EXPLAIN : ( 'E' | 'e' ) ( 'X' | 'x' ) ( 'P' | 'p' ) ( 'L' | 'l' ) ( 'A' | 'a' ) 
 PROFILE : ( 'P' | 'p' ) ( 'R' | 'r' ) ( 'O' | 'o' ) ( 'F' | 'f' ) ( 'I' | 'i' ) ( 'L' | 'l' ) ( 'E' | 'e' ) ;
 
 OPTIMIZE : ( 'O' | 'o' ) ( 'P' | 'p' ) ( 'T' | 't' ) ( 'I' | 'i' ) ( 'M' | 'm' ) ( 'I' | 'i' ) ( 'Z' | 'z' ) ( 'E' | 'e' ) ;
+
+MAINTENANCE : ( 'M' | 'm' ) ( 'A' | 'a' ) ( 'I' | 'i' ) ( 'N' | 'n' ) ( 'T' | 't' ) ( 'E' | 'e' ) ( 'N' | 'n' ) ( 'A' | 'a' ) ( 'N' | 'n' ) ( 'C' | 'c' ) ( 'E' | 'e' );
 
 oC_Query : oC_RegularQuery
          | oC_StandaloneCall

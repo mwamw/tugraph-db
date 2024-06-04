@@ -86,11 +86,13 @@ class OpCreate : public OpBase {
             LcypherParser parser(&tokens);
             VarlenUnfoldVisitor visitor(parser.oC_Cypher());
             auto unfold_queries=visitor.GetRewriteQueries();
-            for(auto unfold_auery:unfold_queries){
+            for(auto unfold_query:unfold_queries){
                 // schema重写优化
                 cypher::ElapsedTime temp;
                 Scheduler scheduler;
-                auto new_unfold_query=scheduler.EvalCypherWithoutNewTxn(ctx,"optimize "+unfold_auery,temp);
+                auto new_unfold_query=scheduler.EvalCypherWithoutNewTxn(ctx,"optimize "+unfold_query,temp);
+                LOG_DEBUG()<<"unfold query:"<<unfold_query;
+                LOG_DEBUG()<<"new unfold query:"<<new_unfold_query;
                 //获得视图更新语句
                 ANTLRInputStream input(new_unfold_query);
                 LcypherLexer lexer(&input);
@@ -242,13 +244,25 @@ class OpCreate : public OpBase {
                         auto &relp_pattern = std::get<0>(chain);
                         auto &lhs_node = pattern_graph_->GetNode(std::get<0>(lhs_patt));
                         auto &rhs_node = pattern_graph_->GetNode(std::get<0>(rhs_patt));
+#ifndef NDEBUG
+                        LOG_DEBUG()<<"create vertex 1";
+#endif
                         if (lhs_node.derivation_ == Node::CREATED && !lhs_node.Visited()) {
                             CreateVertex(ctx, lhs_patt);
                         }
+#ifndef NDEBUG
+                        LOG_DEBUG()<<"create vertex 2";
+#endif
                         if (rhs_node.derivation_ == Node::CREATED && !rhs_node.Visited()) {
                             CreateVertex(ctx, rhs_patt);
                         }
+#ifndef NDEBUG
+                        LOG_DEBUG()<<"create vertex 3";
+#endif
                         CreateEdge(ctx, lhs_patt, rhs_patt, relp_pattern);
+#ifndef NDEBUG
+                        LOG_DEBUG()<<"create vertex 4";
+#endif
                         lhs_patt = rhs_patt;
                     }
                 }
@@ -266,7 +280,7 @@ class OpCreate : public OpBase {
                 .append(" vertices, created ")
                 .append(std::to_string(ctx->result_info_->statistics.edges_created))
                 .append(" edges.");
-            CYPHER_THROW_ASSERT(ctx->result_->Header().size() == 1);
+            // CYPHER_THROW_ASSERT(ctx->result_->Header().size() == 1);
             CYPHER_THROW_ASSERT(record);
             record->values.clear();
             record->AddConstant(lgraph::FieldData(summary));
@@ -339,6 +353,9 @@ class OpCreate : public OpBase {
             if (children.size() > 1) CYPHER_TODO();
             auto child = children[0];
             if (summary_) {
+#ifndef NDEBUG
+                LOG_DEBUG()<<"create consume 1";
+#endif
                 while (child->Consume(ctx) == OP_OK) CreateVE(ctx);
                 ResultSummary(ctx);
                 state = StreamDepleted;

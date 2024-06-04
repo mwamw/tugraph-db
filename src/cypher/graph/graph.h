@@ -86,8 +86,14 @@ class PatternGraph {
     Node &GetNode(NodeID id);
 
     const Node &GetNode(NodeID id) const {
-        if ((size_t)id >= _nodes.size()) return EmptyNode();
-        return _nodes[id];
+        // if ((size_t)id >= _nodes.size()) return EmptyNode();
+        // return _nodes[id];
+        for(auto &node : _nodes){
+            if(node.ID() == id){
+                return node;
+            }
+        }
+        return EmptyNode();
     }
 
     Node &GetNode(const std::string &alias);
@@ -119,11 +125,20 @@ class PatternGraph {
 
     NodeID AddNode(Node *node) {
         NodeID nid = _next_nid;
+        // bool is_referenced=false;
+        // if(symbol_table.symbols.find(node->Alias()) != symbol_table.symbols.end()){
+        //     is_referenced=symbol_table.symbols[node->Alias()].is_referenced;
+        //     // symbol_table.symbols[alias] = node;
+        // }
+        // _nodes.emplace_back(nid, node->Label(), node->Alias(), node->Prop(), node->derivation_,is_referenced);
         _nodes.emplace_back(nid, node->Label(), node->Alias(), node->Prop(), node->derivation_);
         _node_map.emplace(node->Alias(), nid);
         _next_nid++;
         return nid;
     }
+
+    bool RemoveNode(NodeID node_id);
+
 
     RelpID AddRelationship(const std::set<std::string> &types, NodeID lhs, NodeID rhs,
                            parser::LinkDirection direction, const std::string &alias,
@@ -142,6 +157,8 @@ class PatternGraph {
         return AddRelationship(relp->Types(), relp->Lhs(), relp->Rhs(), relp->direction_,
                                relp->Alias(), relp->MinHop(), relp->MaxHop(), relp->derivation_);
     }
+
+    bool RemoveRelationship(RelpID relp_id);
 
     NodeID BuildNode(const parser::TUP_NODE_PATTERN &node_pattern, Node::Derivation derivation);
 

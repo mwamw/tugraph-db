@@ -333,7 +333,23 @@ class VIter {
         _key_end = std::move(rhs._key_end);
     }
 
-    VIter &operator=(VIter &&rhs) = delete;
+    // VIter &operator=(VIter &&rhs) = delete;
+
+    VIter &operator=(VIter &&rhs) noexcept {
+        if (this != &rhs) {
+            _type = rhs._type;
+            _vit = rhs._vit;
+            rhs._vit = nullptr;
+            _txn = rhs._txn;
+            rhs._txn = nullptr;
+            _vid = rhs._vid;
+            _label = std::move(rhs._label);
+            _field = std::move(rhs._field);
+            _key_start = std::move(rhs._key_start);
+            _key_end = std::move(rhs._key_end);
+        }
+        return *this;
+    }
 
     bool Initialized() const { return _vit != nullptr; }
 

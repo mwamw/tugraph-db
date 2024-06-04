@@ -31,6 +31,13 @@
 #include "cypher/execution_plan/execution_plan.h"
 #include "server/bolt_session.h"
 
+// for view rewrite
+#include "parser/generated/LcypherLexer.h"
+#include "parser/generated/LcypherParser.h"
+#include "parser/cypher_base_visitor.h"
+#include "parser/cypher_error_listener.h"
+#include "cypher/execution_plan/view_rewriter/view_rewriter.h"
+
 namespace cypher {
 using namespace parser;
 using namespace lgraph_log;
@@ -1052,6 +1059,27 @@ OpBase *ExecutionPlan::BuildPart(const parser::QueryPart &part, int part_id) {
     /* build the pattern graph */
     BuildQueryGraph(part, pattern_graph);
 
+    if(!_is_view_maintenance&&!_is_optimize){
+        for(auto &view_pattern_graph:_view_pattern_graphs){
+            // view_pattern_graph.first
+            LOG_DEBUG()<<"开始视图重写优化";
+            LOG_DEBUG()<<"view name:"<<view_pattern_graph.first;
+            LOG_DEBUG()<<"view graph empty:"<<(view_pattern_graph.second==nullptr);
+            // LOG_DEBUG()<<view_pattern_graph.second->DumpGraph();
+            LOG_DEBUG()<<pattern_graph.DumpGraph();
+            ViewRewriter view_rewriter(&pattern_graph,(view_pattern_graph.second),view_pattern_graph.first);
+            view_rewriter.GraphRewriteUseViews();
+            LOG_DEBUG()<<pattern_graph.DumpGraph();
+        }
+        if(_view_pattern_graphs.size()>0)
+            pattern_graph.symbol_table.Recover();
+    }
+    // for(size_t i=0;i<_view_pattern_graphs.size();i++){
+    //     auto view_pattern_graph=&_view_pattern_graphs.at(i);
+    //     ViewRewriter view_rewriter(&pattern_graph,view_pattern_graph,);
+    //     view_rewriter.GraphRewriteUseViews();
+    // }
+
     /* Build result_set info (header etc.) for current part */
     _result_info = ResultInfo();
     BuildResultSetInfo(part, _result_info);
@@ -1262,6 +1290,53 @@ static bool CheckReturnElements(const std::vector<parser::SglQuery> &stmt) {
     return true;
 }
 
+void ExecutionPlan::GetViewPatternGraphs(cypher::RTContext *ctx){
+    std::ifstream ifs(_view_path);
+
+    // 检查文件是否成功打开
+    if (!ifs) {
+        std::cout << "Failed to open file: " << _view_path << std::endl;
+        return;
+    }
+
+    // 使用nlohmann的json库来解析文件
+    nlohmann::json j;
+    try {
+        ifs >> j;
+    } catch (nlohmann::json::parse_error& e) {
+        j = nlohmann::json::array();
+    }
+    std::vector<std::string> view_queries;
+    // _view_pattern_graphs.resize(j.size());
+    for(size_t i=0;i<j.size();i++){
+        using namespace parser;
+        using namespace antlr4;
+        std::string query=j.at(i)["query"];
+        ANTLRInputStream input(query);
+        LcypherLexer lexer(&input);
+        CommonTokenStream tokens(&lexer);
+        LOG_DEBUG() <<"parser s"<<std::endl; // de
+        LcypherParser parser(&tokens);
+        /* We can set ErrorHandler here.
+            * setErrorHandler(std::make_shared<BailErrorStrategy>());
+            * add customized ErrorListener  */
+        LOG_DEBUG() <<"parser e"<<std::endl; // de
+        // parser.addErrorListener(&CypherErrorListener::INSTANCE);
+        LOG_DEBUG() <<"visitor s"<<std::endl; // de
+        auto oc_cypher=parser.oC_Cypher();
+        CypherBaseVisitor visitor(ctx, oc_cypher);
+        // PatternGraph pattern_graph;
+        PatternGraph* pattern_graph=new PatternGraph();
+        // auto &pattern_graph=_view_pattern_graphs.at(i);
+        BuildQueryGraph(visitor.GetQuery().at(0).parts.at(0),*pattern_graph);
+        LOG_DEBUG()<<"view graph:";
+        LOG_DEBUG()<<pattern_graph->DumpGraph();
+        _view_pattern_graphs[j.at(i)["view_name"]]=pattern_graph;
+        // _view_pattern_graphs[j.at(i)["view_name"]]=std::move(pattern_graph);
+        LOG_DEBUG()<<"create view graph end";
+    }
+}
+
 void ExecutionPlan::Build(const std::vector<parser::SglQuery> &stmt, parser::CmdType cmd,
                           cypher::RTContext *ctx) {
     // check return elements first
@@ -1272,6 +1347,7 @@ void ExecutionPlan::Build(const std::vector<parser::SglQuery> &stmt, parser::Cmd
     auto parent_dir=ctx->galaxy_->GetConfig().dir;
     if(parent_dir.end()[-1]=='/')parent_dir.pop_back();
     _view_path = parent_dir+"/view/"+ctx->graph_+".json";
+    GetViewPatternGraphs(ctx);
     // _view_path="/data/view/"+ctx->graph_+".json";
     _cmd_type = cmd;
     /* read_only = AND(parts read_only)
