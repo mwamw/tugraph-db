@@ -47,6 +47,7 @@ class Scheduler {
     void Eval(RTContext *ctx, const lgraph_api::GraphQueryType &type, const std::string &script,
               ElapsedTime &elapsed);
     void EvalCypher(RTContext *ctx, const std::string &script, ElapsedTime &elapsed);
+    const std::string EvalCypher(RTContext *ctx, const std::string &script, ElapsedTime &elapsed, bool is_with_new_txn);
     // void EvalCypher(RTContext *ctx, const std::string &script, ElapsedTime &elapsed, bool update_view);
     const std::string EvalCypherWithoutNewTxn(RTContext *ctx, const std::string &script, ElapsedTime &elapsed);
     

@@ -292,8 +292,8 @@ const std::string RewriteCypherUseViews(RTContext *ctx,const std::string &script
     return script;
 }
 
-const std::string Scheduler::EvalCypherWithoutNewTxn(RTContext *ctx, const std::string &script, ElapsedTime &elapsed) {
-    LOG_DEBUG()<<"EvalCypherWithoutNewTxn txn exist:"<<(ctx->txn_!=nullptr);
+const std::string Scheduler::EvalCypher(RTContext *ctx, const std::string &script, ElapsedTime &elapsed, bool is_with_new_txn) {
+    // LOG_DEBUG()<<"EvalCypherWithoutNewTxn txn exist:"<<(ctx->txn_!=nullptr);
     using namespace parser;
     using namespace antlr4;
     // LOG_DEBUG()<<"tugraph dir: "<< ctx->galaxy_->GetConfig().dir;
@@ -316,7 +316,7 @@ const std::string Scheduler::EvalCypherWithoutNewTxn(RTContext *ctx, const std::
         LOG_DEBUG() <<"visitor s"<<std::endl; // de
         auto oc_cypher=parser.oC_Cypher();
         CypherBaseVisitor visitor(ctx, oc_cypher);
-        LOG_DEBUG()<<"EvalCypherWithoutNewTxn txn exist2:"<<(ctx->txn_!=nullptr);
+        // LOG_DEBUG()<<"EvalCypherWithoutNewTxn txn exist2:"<<(ctx->txn_!=nullptr);
         LOG_DEBUG() <<"visitor e"<<std::endl; // de
         LOG_DEBUG() << "-----CLAUSE TO STRING-----";
         for (const auto &sql_query : visitor.GetQuery()) {
@@ -327,13 +327,13 @@ const std::string Scheduler::EvalCypherWithoutNewTxn(RTContext *ctx, const std::
             plan.get()->SetMaintenance(true);
         else if(visitor.CommandType()==parser::CmdType::OPTIMIZE)
             plan.get()->SetOptimize(true);
-        LOG_DEBUG()<<"EvalCypherWithoutNewTxn txn exist6:"<<(ctx->txn_!=nullptr);
+        // LOG_DEBUG()<<"EvalCypherWithoutNewTxn txn exist6:"<<(ctx->txn_!=nullptr);
         plan->Build(visitor.GetQuery(), visitor.CommandType(), ctx);
-        LOG_DEBUG()<<"EvalCypherWithoutNewTxn txn exist7:"<<(ctx->txn_!=nullptr);
+        // LOG_DEBUG()<<"EvalCypherWithoutNewTxn txn exist7:"<<(ctx->txn_!=nullptr);
         plan->Validate(ctx);
-        LOG_DEBUG()<<"EvalCypherWithoutNewTxn txn exist3:"<<(ctx->txn_!=nullptr);
+        // LOG_DEBUG()<<"EvalCypherWithoutNewTxn txn exist3:"<<(ctx->txn_!=nullptr);
         LOG_DEBUG() << "Command Type" <<plan->CommandType(); // de
-        if (plan->CommandType() != parser::CmdType::QUERY) {
+        if (plan->CommandType() != parser::CmdType::QUERY && plan->CommandType() != parser::CmdType::MAINTENANCE) {
             ctx->result_info_ = std::make_unique<ResultInfo>();
             ctx->result_ = std::make_unique<lgraph::Result>();
             std::string header, data;
@@ -349,12 +349,14 @@ const std::string Scheduler::EvalCypherWithoutNewTxn(RTContext *ctx, const std::
                 const std::vector<cypher::PatternGraph>& pattern_graphs=plan->GetPatternGraphs();
                 ParseTreeToCypherVisitor new_visitor(ctx,oc_cypher,pattern_graphs);
                 LOG_DEBUG()<<"optimize end";
-                // ctx->result_info_ = std::make_unique<ResultInfo>();
-                // ctx->result_ = std::make_unique<lgraph::Result>();
+                if(is_with_new_txn){
+                    ctx->result_info_ = std::make_unique<ResultInfo>();
+                    ctx->result_ = std::make_unique<lgraph::Result>();
 
-                // ctx->result_->ResetHeader({{"@opt_query", lgraph_api::LGraphType::STRING}});
-                // auto r = ctx->result_->MutableRecord();
-                // r->Insert("@opt_query", lgraph::FieldData(new_visitor.GetOptQuery()));
+                    ctx->result_->ResetHeader({{"@opt_query", lgraph_api::LGraphType::STRING}});
+                    auto r = ctx->result_->MutableRecord();
+                    r->Insert("@opt_query", lgraph::FieldData(new_visitor.GetOptQuery()));
+                }
                 return new_visitor.GetOptQuery();
             }
             else if(visitor.CommandType()==parser::CmdType::VIEW){ //创建视图
@@ -373,8 +375,53 @@ const std::string Scheduler::EvalCypherWithoutNewTxn(RTContext *ctx, const std::
                 std::cout<<"new query: "<<new_query<<std::endl;
                 elapsed.t_compile = fma_common::GetTime() - t0;
                 ElapsedTime temp;
-                EvalCypherWithoutNewTxn(ctx,create_query,temp);
-                EvalCypherWithoutNewTxn(ctx,new_query,temp);
+                if(is_with_new_txn)
+                    EvalCypher(ctx,create_query,temp);
+                else
+                    EvalCypherWithoutNewTxn(ctx,create_query,temp);
+                // 将信息保存到json文件中
+                auto parent_dir=ctx->galaxy_->GetConfig().dir;
+                if(parent_dir.end()[-1]=='/')parent_dir.pop_back();
+                std::string file_path=parent_dir+"/view/"+ctx->graph_+".json";
+                // std::string file_path="/data/view/"+ctx->graph_+".json";
+                AddElement(file_path,view_name,constraints.first,constraints.second,new_query);
+                
+                // 为重写后的语句生成执行计划
+                ANTLRInputStream new_input(new_query);
+                LcypherLexer new_lexer(&new_input);
+                CommonTokenStream new_tokens(&new_lexer);
+                LcypherParser new_parser(&new_tokens);
+                new_parser.addErrorListener(&CypherErrorListener::INSTANCE);
+                auto new_oc_cypher=new_parser.oC_Cypher();
+                CypherBaseVisitor new_base_visitor(ctx, new_oc_cypher);
+                LOG_DEBUG() <<"visitor e"<<std::endl; // de
+                LOG_DEBUG() << "-----CLAUSE TO STRING-----";
+                plan = std::make_shared<ExecutionPlan>();
+                plan->SetCreateView(true);
+                plan->Build(new_base_visitor.GetQuery(), new_base_visitor.CommandType(), ctx);
+                // LOG_DEBUG()<<"EvalCypherWithoutNewTxn txn exist7:"<<(ctx->txn_!=nullptr);
+                plan->Validate(ctx);
+                
+                if(!is_with_new_txn)
+                    plan->ExecuteWithoutNewTxn(ctx);
+                else{
+                    if (!plan->ReadOnly() && ctx->optimistic_) {
+                        while (1) {
+                            try {
+                                plan->Execute(ctx);
+                                break;
+                            } catch (lgraph::TxnCommitException &e) {
+                                LOG_DEBUG() << e.what();
+                            }
+                        }
+                    } else {
+                        plan->Execute(ctx);
+                    }
+                }
+                // if(is_with_new_txn)
+                //     EvalCypher(ctx,new_query,temp);
+                // else
+                //     EvalCypherWithoutNewTxn(ctx,new_query,temp);
                 ctx->result_info_ = std::make_unique<ResultInfo>();
                 ctx->result_ = std::make_unique<lgraph::Result>();
 
@@ -383,12 +430,7 @@ const std::string Scheduler::EvalCypherWithoutNewTxn(RTContext *ctx, const std::
                 r->Insert("view_name", lgraph::FieldData(view_name));
                 r->Insert("start_node_label", lgraph::FieldData(constraints.first));
                 r->Insert("end_node_label", lgraph::FieldData(constraints.second));
-                // 将信息保存到json文件中
-                auto parent_dir=ctx->galaxy_->GetConfig().dir;
-                if(parent_dir.end()[-1]=='/')parent_dir.pop_back();
-                std::string file_path=parent_dir+"/view/"+ctx->graph_+".json";
-                // std::string file_path="/data/view/"+ctx->graph_+".json";
-                AddElement(file_path,view_name,constraints.first,constraints.second,new_query);
+                
                 
                 elapsed.t_total = fma_common::GetTime() - t0;
                 LOG_DEBUG() << "end";
@@ -426,7 +468,312 @@ const std::string Scheduler::EvalCypherWithoutNewTxn(RTContext *ctx, const std::
     LOG_DEBUG() << plan->DumpGraph();
     elapsed.t_compile = fma_common::GetTime() - t0;
     LOG_DEBUG()<<"EvalCypherWithoutNewTxn2 txn exist4:"<<(ctx->txn_!=nullptr);
-    plan->ExecuteWithoutNewTxn(ctx);
+    if(!is_with_new_txn)
+        plan->ExecuteWithoutNewTxn(ctx);
+    else{
+        if (!plan->ReadOnly() && ctx->optimistic_) {
+            while (1) {
+                try {
+                    plan->Execute(ctx);
+                    break;
+                } catch (lgraph::TxnCommitException &e) {
+                    LOG_DEBUG() << e.what();
+                }
+            }
+        } else {
+            plan->Execute(ctx);
+        }
+    }
+    // if(!plan->ReadOnly())UpdateView(ctx);
+    elapsed.t_total = fma_common::GetTime() - t0;
+    elapsed.t_exec = elapsed.t_total - elapsed.t_compile;
+    return std::string();
+
+}
+const std::string Scheduler::EvalCypherWithoutNewTxn(RTContext *ctx, const std::string &script, ElapsedTime &elapsed) {
+    return EvalCypher(ctx,script,elapsed,false);
+    // LOG_DEBUG()<<"EvalCypherWithoutNewTxn txn exist:"<<(ctx->txn_!=nullptr);
+    // using namespace parser;
+    // using namespace antlr4;
+    // // LOG_DEBUG()<<"tugraph dir: "<< ctx->galaxy_->GetConfig().dir;
+    // auto t0 = fma_common::GetTime();
+    // // <script, execution plan>
+    // thread_local LRUCacheThreadUnsafe<std::string, std::shared_ptr<ExecutionPlan>> tls_plan_cache;
+    // std::shared_ptr<ExecutionPlan> plan;
+    // if (!tls_plan_cache.Get(script, plan)) {
+    //     // auto rewrite_query=RewriteCypherUseViews(ctx,script);
+    //     ANTLRInputStream input(script);
+    //     LcypherLexer lexer(&input);
+    //     CommonTokenStream tokens(&lexer);
+    //     LOG_DEBUG() <<"parser s"<<std::endl; // de
+    //     LcypherParser parser(&tokens);
+    //     /* We can set ErrorHandler here.
+    //      * setErrorHandler(std::make_shared<BailErrorStrategy>());
+    //      * add customized ErrorListener  */
+    //     LOG_DEBUG() <<"parser e"<<std::endl; // de
+    //     parser.addErrorListener(&CypherErrorListener::INSTANCE);
+    //     LOG_DEBUG() <<"visitor s"<<std::endl; // de
+    //     auto oc_cypher=parser.oC_Cypher();
+    //     CypherBaseVisitor visitor(ctx, oc_cypher);
+    //     LOG_DEBUG()<<"EvalCypherWithoutNewTxn txn exist2:"<<(ctx->txn_!=nullptr);
+    //     LOG_DEBUG() <<"visitor e"<<std::endl; // de
+    //     LOG_DEBUG() << "-----CLAUSE TO STRING-----";
+    //     for (const auto &sql_query : visitor.GetQuery()) {
+    //         LOG_DEBUG() << sql_query.ToString();
+    //     }
+    //     plan = std::make_shared<ExecutionPlan>();
+    //     if(visitor.CommandType()==parser::CmdType::MAINTENANCE)
+    //         plan.get()->SetMaintenance(true);
+    //     else if(visitor.CommandType()==parser::CmdType::OPTIMIZE)
+    //         plan.get()->SetOptimize(true);
+    //     LOG_DEBUG()<<"EvalCypherWithoutNewTxn txn exist6:"<<(ctx->txn_!=nullptr);
+    //     plan->Build(visitor.GetQuery(), visitor.CommandType(), ctx);
+    //     LOG_DEBUG()<<"EvalCypherWithoutNewTxn txn exist7:"<<(ctx->txn_!=nullptr);
+    //     plan->Validate(ctx);
+    //     LOG_DEBUG()<<"EvalCypherWithoutNewTxn txn exist3:"<<(ctx->txn_!=nullptr);
+    //     LOG_DEBUG() << "Command Type" <<plan->CommandType(); // de
+    //     if (plan->CommandType() != parser::CmdType::QUERY) {
+    //         ctx->result_info_ = std::make_unique<ResultInfo>();
+    //         ctx->result_ = std::make_unique<lgraph::Result>();
+    //         std::string header, data;
+    //         if (plan->CommandType() == parser::CmdType::EXPLAIN) {
+    //             header = "@plan";
+    //             data = plan->DumpPlan(0, false);
+    //         } else if (plan->CommandType() == parser::CmdType::PROFILE){
+    //             header = "@profile";
+    //             data = plan->DumpGraph();
+    //         }
+    //         else if(visitor.CommandType() == parser::CmdType::OPTIMIZE) {
+    //             LOG_DEBUG()<<"optimize start";
+    //             const std::vector<cypher::PatternGraph>& pattern_graphs=plan->GetPatternGraphs();
+    //             ParseTreeToCypherVisitor new_visitor(ctx,oc_cypher,pattern_graphs);
+    //             LOG_DEBUG()<<"optimize end";
+    //             // ctx->result_info_ = std::make_unique<ResultInfo>();
+    //             // ctx->result_ = std::make_unique<lgraph::Result>();
+
+    //             // ctx->result_->ResetHeader({{"@opt_query", lgraph_api::LGraphType::STRING}});
+    //             // auto r = ctx->result_->MutableRecord();
+    //             // r->Insert("@opt_query", lgraph::FieldData(new_visitor.GetOptQuery()));
+    //             return new_visitor.GetOptQuery();
+    //         }
+    //         else if(visitor.CommandType()==parser::CmdType::VIEW){ //创建视图
+    //             LOG_DEBUG() << "s";
+    //             const std::vector<cypher::PatternGraph>& pattern_graphs=plan->GetPatternGraphs();
+    //             LOG_DEBUG() << "new visitor s";
+    //             RewriteViews new_visitor(ctx,oc_cypher,pattern_graphs);
+    //             LOG_DEBUG() << "new visitor e";
+    //             auto view_name=new_visitor.GetViewName();
+    //             auto constraints=new_visitor.GetConstraints();
+    //             auto new_query=new_visitor.GetRewriteQuery();
+    //             LOG_DEBUG() << "hhh";
+    //             // std::string create_query="CALL db.createEdgeLabel('"+view_name+"', '[[\""+constraints.first+"\",\""+constraints.second+"\"]]','is_view',bool,true)";
+    //             std::string create_query="CALL db.createEdgeLabel('"+view_name+"', '[]')";
+    //             std::cout<<"create query: "<<create_query<<std::endl;
+    //             std::cout<<"new query: "<<new_query<<std::endl;
+    //             elapsed.t_compile = fma_common::GetTime() - t0;
+    //             ElapsedTime temp;
+    //             EvalCypherWithoutNewTxn(ctx,create_query,temp);
+    //             // 将信息保存到json文件中
+    //             auto parent_dir=ctx->galaxy_->GetConfig().dir;
+    //             if(parent_dir.end()[-1]=='/')parent_dir.pop_back();
+    //             std::string file_path=parent_dir+"/view/"+ctx->graph_+".json";
+    //             // std::string file_path="/data/view/"+ctx->graph_+".json";
+    //             AddElement(file_path,view_name,constraints.first,constraints.second,new_query);
+
+    //             EvalCypherWithoutNewTxn(ctx,new_query,temp);
+    //             ctx->result_info_ = std::make_unique<ResultInfo>();
+    //             ctx->result_ = std::make_unique<lgraph::Result>();
+
+    //             ctx->result_->ResetHeader({{"view_name", lgraph_api::LGraphType::STRING},{"start_node_label", lgraph_api::LGraphType::STRING},{"end_node_label", lgraph_api::LGraphType::STRING}});
+    //             auto r = ctx->result_->MutableRecord();
+    //             r->Insert("view_name", lgraph::FieldData(view_name));
+    //             r->Insert("start_node_label", lgraph::FieldData(constraints.first));
+    //             r->Insert("end_node_label", lgraph::FieldData(constraints.second));
+                
+                
+    //             elapsed.t_total = fma_common::GetTime() - t0;
+    //             LOG_DEBUG() << "end";
+    //             return std::string();
+    //         }
+    //         ctx->result_->ResetHeader({{header, lgraph_api::LGraphType::STRING}});
+    //         auto r = ctx->result_->MutableRecord();
+    //         r->Insert(header, lgraph::FieldData(data));
+    //         if (ctx->bolt_conn_) {
+    //             auto session = (bolt::BoltSession *)ctx->bolt_conn_->GetContext();
+    //             while (!session->streaming_msg) {
+    //                 session->streaming_msg = session->msgs.Pop(std::chrono::milliseconds(100));
+    //                 if (ctx->bolt_conn_->has_closed()) {
+    //                     LOG_INFO() << "The bolt connection is closed, cancel the op execution.";
+    //                     return std::string();
+    //                 }
+    //             }
+    //             std::unordered_map<std::string, std::any> meta;
+    //             meta["fields"] = ctx->result_->BoltHeader();
+    //             bolt::PackStream ps;
+    //             ps.AppendSuccess(meta);
+    //             if (session->streaming_msg.value().type == bolt::BoltMsg::PullN) {
+    //                 ps.AppendRecords(ctx->result_->BoltRecords());
+    //             } else if (session->streaming_msg.value().type == bolt::BoltMsg::DiscardN) {
+    //                 // ...
+    //             }
+    //             ps.AppendSuccess();
+    //             ctx->bolt_conn_->PostResponse(std::move(ps.MutableBuffer()));
+    //         }
+    //         return std::string();
+    //     }
+    //     LOG_DEBUG() << "Plan cache disabled.";
+    // }
+    // LOG_DEBUG() << plan->DumpPlan(0, false);
+    // LOG_DEBUG() << plan->DumpGraph();
+    // elapsed.t_compile = fma_common::GetTime() - t0;
+    // LOG_DEBUG()<<"EvalCypherWithoutNewTxn2 txn exist4:"<<(ctx->txn_!=nullptr);
+    // plan->ExecuteWithoutNewTxn(ctx);
+    // // if (!plan->ReadOnly() && ctx->optimistic_) {
+    // //     while (1) {
+    // //         try {
+    // //             plan->Execute(ctx);
+    // //             break;
+    // //         } catch (lgraph::TxnCommitException &e) {
+    // //             LOG_DEBUG() << e.what();
+    // //         }
+    // //     }
+    // // } else {
+    // //     plan->Execute(ctx);
+    // // }
+    // // if(!plan->ReadOnly())UpdateView(ctx);
+    // elapsed.t_total = fma_common::GetTime() - t0;
+    // elapsed.t_exec = elapsed.t_total - elapsed.t_compile;
+    // return std::string();
+}
+
+void Scheduler::EvalCypher(RTContext *ctx, const std::string &script, ElapsedTime &elapsed) {
+    EvalCypher(ctx,script,elapsed,true);
+    // using namespace parser;
+    // using namespace antlr4;
+    // // LOG_DEBUG()<<"tugraph dir: "<< ctx->galaxy_->GetConfig().dir;
+    // auto t0 = fma_common::GetTime();
+    // // <script, execution plan>
+    // thread_local LRUCacheThreadUnsafe<std::string, std::shared_ptr<ExecutionPlan>> tls_plan_cache;
+    // std::shared_ptr<ExecutionPlan> plan;
+    // if (!tls_plan_cache.Get(script, plan)) {
+    //     // auto rewrite_query=RewriteCypherUseViews(ctx,script);
+    //     ANTLRInputStream input(script);
+    //     LcypherLexer lexer(&input);
+    //     CommonTokenStream tokens(&lexer);
+    //     LOG_DEBUG() <<"parser s"<<std::endl; // de
+    //     LcypherParser parser(&tokens);
+    //     /* We can set ErrorHandler here.
+    //      * setErrorHandler(std::make_shared<BailErrorStrategy>());
+    //      * add customized ErrorListener  */
+    //     LOG_DEBUG() <<"parser e"<<std::endl; // de
+    //     parser.addErrorListener(&CypherErrorListener::INSTANCE);
+    //     LOG_DEBUG() <<"visitor s"<<std::endl; // de
+    //     auto oc_cypher=parser.oC_Cypher();
+    //     CypherBaseVisitor visitor(ctx, oc_cypher);
+    //     LOG_DEBUG() <<"visitor e"<<std::endl; // de
+    //     LOG_DEBUG() << "-----CLAUSE TO STRING-----";
+    //     for (const auto &sql_query : visitor.GetQuery()) {
+    //         LOG_DEBUG() << sql_query.ToString();
+    //     }
+    //     plan = std::make_shared<ExecutionPlan>();
+    //     if(visitor.CommandType()==parser::CmdType::MAINTENANCE)
+    //         plan.get()->SetMaintenance(true);
+    //     else if(visitor.CommandType()==parser::CmdType::OPTIMIZE)
+    //         plan.get()->SetOptimize(true);
+    //     plan->Build(visitor.GetQuery(), visitor.CommandType(), ctx);
+    //     plan->Validate(ctx);
+    //     LOG_DEBUG() << "Command Type" <<plan->CommandType(); // de
+    //     if (plan->CommandType() != parser::CmdType::QUERY) {
+    //         ctx->result_info_ = std::make_unique<ResultInfo>();
+    //         ctx->result_ = std::make_unique<lgraph::Result>();
+    //         std::string header, data;
+    //         if (plan->CommandType() == parser::CmdType::EXPLAIN) {
+    //             header = "@plan";
+    //             data = plan->DumpPlan(0, false);
+    //         } else if (plan->CommandType() == parser::CmdType::PROFILE){
+    //             header = "@profile";
+    //             data = plan->DumpGraph();
+    //         } else if(visitor.CommandType() == parser::CmdType::OPTIMIZE) {
+    //             const std::vector<cypher::PatternGraph>& pattern_graphs=plan->GetPatternGraphs();
+    //             ParseTreeToCypherVisitor new_visitor(ctx,oc_cypher,pattern_graphs);
+    //             ctx->result_info_ = std::make_unique<ResultInfo>();
+    //             ctx->result_ = std::make_unique<lgraph::Result>();
+
+    //             ctx->result_->ResetHeader({{"@opt_query", lgraph_api::LGraphType::STRING}});
+    //             auto r = ctx->result_->MutableRecord();
+    //             r->Insert("@opt_query", lgraph::FieldData(new_visitor.GetOptQuery()));
+    //             return;
+    //         }
+    //         else{ //创建视图
+    //             LOG_DEBUG() << "s";
+    //             const std::vector<cypher::PatternGraph>& pattern_graphs=plan->GetPatternGraphs();
+    //             LOG_DEBUG() << "new visitor s";
+    //             RewriteViews new_visitor(ctx,oc_cypher,pattern_graphs);
+    //             LOG_DEBUG() << "new visitor e";
+    //             auto view_name=new_visitor.GetViewName();
+    //             auto constraints=new_visitor.GetConstraints();
+    //             auto new_query=new_visitor.GetRewriteQuery();
+    //             LOG_DEBUG() << "hhh";
+    //             // std::string create_query="CALL db.createEdgeLabel('"+view_name+"', '[[\""+constraints.first+"\",\""+constraints.second+"\"]]','is_view',bool,true)";
+    //             std::string create_query="CALL db.createEdgeLabel('"+view_name+"', '[]')";
+    //             std::cout<<"create query: "<<create_query<<std::endl;
+    //             std::cout<<"new query: "<<new_query<<std::endl;
+    //             elapsed.t_compile = fma_common::GetTime() - t0;
+    //             ElapsedTime temp;
+    //             EvalCypher(ctx,create_query,temp);
+    //             // 将信息保存到json文件中
+    //             auto parent_dir=ctx->galaxy_->GetConfig().dir;
+    //             if(parent_dir.end()[-1]=='/')parent_dir.pop_back();
+    //             std::string file_path=parent_dir+"/view/"+ctx->graph_+".json";
+    //             // std::string file_path="/data/view/"+ctx->graph_+".json";
+    //             AddElement(file_path,view_name,constraints.first,constraints.second,new_query);
+
+    //             EvalCypher(ctx,new_query,temp);
+    //             ctx->result_info_ = std::make_unique<ResultInfo>();
+    //             ctx->result_ = std::make_unique<lgraph::Result>();
+
+    //             ctx->result_->ResetHeader({{"view_name", lgraph_api::LGraphType::STRING},{"start_node_label", lgraph_api::LGraphType::STRING},{"end_node_label", lgraph_api::LGraphType::STRING}});
+    //             auto r = ctx->result_->MutableRecord();
+    //             r->Insert("view_name", lgraph::FieldData(view_name));
+    //             r->Insert("start_node_label", lgraph::FieldData(constraints.first));
+    //             r->Insert("end_node_label", lgraph::FieldData(constraints.second));
+                
+                
+    //             elapsed.t_total = fma_common::GetTime() - t0;
+    //             LOG_DEBUG() << "end";
+    //             return;
+    //         }
+    //         ctx->result_->ResetHeader({{header, lgraph_api::LGraphType::STRING}});
+    //         auto r = ctx->result_->MutableRecord();
+    //         r->Insert(header, lgraph::FieldData(data));
+    //         if (ctx->bolt_conn_) {
+    //             auto session = (bolt::BoltSession *)ctx->bolt_conn_->GetContext();
+    //             while (!session->streaming_msg) {
+    //                 session->streaming_msg = session->msgs.Pop(std::chrono::milliseconds(100));
+    //                 if (ctx->bolt_conn_->has_closed()) {
+    //                     LOG_INFO() << "The bolt connection is closed, cancel the op execution.";
+    //                     return;
+    //                 }
+    //             }
+    //             std::unordered_map<std::string, std::any> meta;
+    //             meta["fields"] = ctx->result_->BoltHeader();
+    //             bolt::PackStream ps;
+    //             ps.AppendSuccess(meta);
+    //             if (session->streaming_msg.value().type == bolt::BoltMsg::PullN) {
+    //                 ps.AppendRecords(ctx->result_->BoltRecords());
+    //             } else if (session->streaming_msg.value().type == bolt::BoltMsg::DiscardN) {
+    //                 // ...
+    //             }
+    //             ps.AppendSuccess();
+    //             ctx->bolt_conn_->PostResponse(std::move(ps.MutableBuffer()));
+    //         }
+    //         return;
+    //     }
+    //     LOG_DEBUG() << "Plan cache disabled.";
+    // }
+    // LOG_DEBUG() << plan->DumpPlan(0, false);
+    // LOG_DEBUG() << plan->DumpGraph();
+    // elapsed.t_compile = fma_common::GetTime() - t0;
     // if (!plan->ReadOnly() && ctx->optimistic_) {
     //     while (1) {
     //         try {
@@ -439,152 +786,9 @@ const std::string Scheduler::EvalCypherWithoutNewTxn(RTContext *ctx, const std::
     // } else {
     //     plan->Execute(ctx);
     // }
-    // if(!plan->ReadOnly())UpdateView(ctx);
-    elapsed.t_total = fma_common::GetTime() - t0;
-    elapsed.t_exec = elapsed.t_total - elapsed.t_compile;
-    return std::string();
-}
-
-void Scheduler::EvalCypher(RTContext *ctx, const std::string &script, ElapsedTime &elapsed) {
-    using namespace parser;
-    using namespace antlr4;
-    // LOG_DEBUG()<<"tugraph dir: "<< ctx->galaxy_->GetConfig().dir;
-    auto t0 = fma_common::GetTime();
-    // <script, execution plan>
-    thread_local LRUCacheThreadUnsafe<std::string, std::shared_ptr<ExecutionPlan>> tls_plan_cache;
-    std::shared_ptr<ExecutionPlan> plan;
-    if (!tls_plan_cache.Get(script, plan)) {
-        // auto rewrite_query=RewriteCypherUseViews(ctx,script);
-        ANTLRInputStream input(script);
-        LcypherLexer lexer(&input);
-        CommonTokenStream tokens(&lexer);
-        LOG_DEBUG() <<"parser s"<<std::endl; // de
-        LcypherParser parser(&tokens);
-        /* We can set ErrorHandler here.
-         * setErrorHandler(std::make_shared<BailErrorStrategy>());
-         * add customized ErrorListener  */
-        LOG_DEBUG() <<"parser e"<<std::endl; // de
-        parser.addErrorListener(&CypherErrorListener::INSTANCE);
-        LOG_DEBUG() <<"visitor s"<<std::endl; // de
-        auto oc_cypher=parser.oC_Cypher();
-        CypherBaseVisitor visitor(ctx, oc_cypher);
-        LOG_DEBUG() <<"visitor e"<<std::endl; // de
-        LOG_DEBUG() << "-----CLAUSE TO STRING-----";
-        for (const auto &sql_query : visitor.GetQuery()) {
-            LOG_DEBUG() << sql_query.ToString();
-        }
-        plan = std::make_shared<ExecutionPlan>();
-        if(visitor.CommandType()==parser::CmdType::MAINTENANCE)
-            plan.get()->SetMaintenance(true);
-        else if(visitor.CommandType()==parser::CmdType::OPTIMIZE)
-            plan.get()->SetOptimize(true);
-        plan->Build(visitor.GetQuery(), visitor.CommandType(), ctx);
-        plan->Validate(ctx);
-        LOG_DEBUG() << "Command Type" <<plan->CommandType(); // de
-        if (plan->CommandType() != parser::CmdType::QUERY) {
-            ctx->result_info_ = std::make_unique<ResultInfo>();
-            ctx->result_ = std::make_unique<lgraph::Result>();
-            std::string header, data;
-            if (plan->CommandType() == parser::CmdType::EXPLAIN) {
-                header = "@plan";
-                data = plan->DumpPlan(0, false);
-            } else if (plan->CommandType() == parser::CmdType::PROFILE){
-                header = "@profile";
-                data = plan->DumpGraph();
-            } else if(visitor.CommandType() == parser::CmdType::OPTIMIZE) {
-                const std::vector<cypher::PatternGraph>& pattern_graphs=plan->GetPatternGraphs();
-                ParseTreeToCypherVisitor new_visitor(ctx,oc_cypher,pattern_graphs);
-                ctx->result_info_ = std::make_unique<ResultInfo>();
-                ctx->result_ = std::make_unique<lgraph::Result>();
-
-                ctx->result_->ResetHeader({{"@opt_query", lgraph_api::LGraphType::STRING}});
-                auto r = ctx->result_->MutableRecord();
-                r->Insert("@opt_query", lgraph::FieldData(new_visitor.GetOptQuery()));
-                return;
-            }
-            else{ //创建视图
-                LOG_DEBUG() << "s";
-                const std::vector<cypher::PatternGraph>& pattern_graphs=plan->GetPatternGraphs();
-                LOG_DEBUG() << "new visitor s";
-                RewriteViews new_visitor(ctx,oc_cypher,pattern_graphs);
-                LOG_DEBUG() << "new visitor e";
-                auto view_name=new_visitor.GetViewName();
-                auto constraints=new_visitor.GetConstraints();
-                auto new_query=new_visitor.GetRewriteQuery();
-                LOG_DEBUG() << "hhh";
-                // std::string create_query="CALL db.createEdgeLabel('"+view_name+"', '[[\""+constraints.first+"\",\""+constraints.second+"\"]]','is_view',bool,true)";
-                std::string create_query="CALL db.createEdgeLabel('"+view_name+"', '[]')";
-                std::cout<<"create query: "<<create_query<<std::endl;
-                std::cout<<"new query: "<<new_query<<std::endl;
-                elapsed.t_compile = fma_common::GetTime() - t0;
-                ElapsedTime temp;
-                EvalCypher(ctx,create_query,temp);
-                EvalCypher(ctx,new_query,temp);
-                ctx->result_info_ = std::make_unique<ResultInfo>();
-                ctx->result_ = std::make_unique<lgraph::Result>();
-
-                ctx->result_->ResetHeader({{"view_name", lgraph_api::LGraphType::STRING},{"start_node_label", lgraph_api::LGraphType::STRING},{"end_node_label", lgraph_api::LGraphType::STRING}});
-                auto r = ctx->result_->MutableRecord();
-                r->Insert("view_name", lgraph::FieldData(view_name));
-                r->Insert("start_node_label", lgraph::FieldData(constraints.first));
-                r->Insert("end_node_label", lgraph::FieldData(constraints.second));
-                // 将信息保存到json文件中
-                auto parent_dir=ctx->galaxy_->GetConfig().dir;
-                if(parent_dir.end()[-1]=='/')parent_dir.pop_back();
-                std::string file_path=parent_dir+"/view/"+ctx->graph_+".json";
-                // std::string file_path="/data/view/"+ctx->graph_+".json";
-                AddElement(file_path,view_name,constraints.first,constraints.second,new_query);
-                
-                elapsed.t_total = fma_common::GetTime() - t0;
-                LOG_DEBUG() << "end";
-                return;
-            }
-            ctx->result_->ResetHeader({{header, lgraph_api::LGraphType::STRING}});
-            auto r = ctx->result_->MutableRecord();
-            r->Insert(header, lgraph::FieldData(data));
-            if (ctx->bolt_conn_) {
-                auto session = (bolt::BoltSession *)ctx->bolt_conn_->GetContext();
-                while (!session->streaming_msg) {
-                    session->streaming_msg = session->msgs.Pop(std::chrono::milliseconds(100));
-                    if (ctx->bolt_conn_->has_closed()) {
-                        LOG_INFO() << "The bolt connection is closed, cancel the op execution.";
-                        return;
-                    }
-                }
-                std::unordered_map<std::string, std::any> meta;
-                meta["fields"] = ctx->result_->BoltHeader();
-                bolt::PackStream ps;
-                ps.AppendSuccess(meta);
-                if (session->streaming_msg.value().type == bolt::BoltMsg::PullN) {
-                    ps.AppendRecords(ctx->result_->BoltRecords());
-                } else if (session->streaming_msg.value().type == bolt::BoltMsg::DiscardN) {
-                    // ...
-                }
-                ps.AppendSuccess();
-                ctx->bolt_conn_->PostResponse(std::move(ps.MutableBuffer()));
-            }
-            return;
-        }
-        LOG_DEBUG() << "Plan cache disabled.";
-    }
-    LOG_DEBUG() << plan->DumpPlan(0, false);
-    LOG_DEBUG() << plan->DumpGraph();
-    elapsed.t_compile = fma_common::GetTime() - t0;
-    if (!plan->ReadOnly() && ctx->optimistic_) {
-        while (1) {
-            try {
-                plan->Execute(ctx);
-                break;
-            } catch (lgraph::TxnCommitException &e) {
-                LOG_DEBUG() << e.what();
-            }
-        }
-    } else {
-        plan->Execute(ctx);
-    }
-    // if(!plan->ReadOnly())UpdateView(ctx);
-    elapsed.t_total = fma_common::GetTime() - t0;
-    elapsed.t_exec = elapsed.t_total - elapsed.t_compile;
+    // // if(!plan->ReadOnly())UpdateView(ctx);
+    // elapsed.t_total = fma_common::GetTime() - t0;
+    // elapsed.t_exec = elapsed.t_total - elapsed.t_compile;
 }
 
 void Scheduler::EvalGql(RTContext *ctx, const std::string &script, ElapsedTime &elapsed) {

@@ -237,7 +237,7 @@ class OpDelete : public OpBase {
                 .append(" vertices, deleted ")
                 .append(std::to_string(ctx->result_info_->statistics.edges_deleted))
                 .append(" edges.");
-            CYPHER_THROW_ASSERT(ctx->result_->Header().size() == 1);
+            // CYPHER_THROW_ASSERT(ctx->result_->Header().size() == 1);
             CYPHER_THROW_ASSERT(record);
             record->values.clear();
             record->AddConstant(lgraph::FieldData(summary));

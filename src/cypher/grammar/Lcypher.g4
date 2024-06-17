@@ -38,7 +38,7 @@ oC_Statement : oC_Query
              | EXPLAIN SP? oC_Query
              | PROFILE SP? oC_Query
              | OPTIMIZE SP? oC_Query
-             | MAINTENANCE
+             | MAINTENANCE SP? oC_Query
              | oC_View
              ;
 

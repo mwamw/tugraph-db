@@ -36,6 +36,14 @@ struct Property {
     } type;
 
     Property() : type(NUL) {}
+
+    bool operator==(const Property &rhs) const {
+        return field == rhs.field && value_alias == rhs.value_alias && value == rhs.value && type == rhs.type;
+    }
+
+    bool Empty() const{
+        return type == NUL;
+    }
 };
 
 /* See also traversal::Path */

@@ -43,6 +43,7 @@ class ExecutionPlan {
     std::string _view_path;
     std::map<std::string,PatternGraph*> _view_pattern_graphs;
     bool _is_view_maintenance = false;
+    bool _is_create_view=false;
     bool _is_optimize=false;
 
     void _AddScanOp(const parser::QueryPart &part, const SymbolTable *sym_tab, Node *node,
@@ -134,5 +135,6 @@ class ExecutionPlan {
 
     void SetMaintenance(bool is_view_maintenance) { _is_view_maintenance = is_view_maintenance; }
     void SetOptimize(bool is_optimize) { _is_optimize = is_optimize; }
+    void SetCreateView(bool is_create_view) { _is_create_view = is_create_view; }
 };
 }  // namespace cypher

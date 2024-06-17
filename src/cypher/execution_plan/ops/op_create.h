@@ -210,6 +210,7 @@ class OpCreate : public OpBase {
         auto euid =
             ctx->txn_->AddEdge(src_node.PullVid(), dst_node.PullVid(), label, fields, values);
         ctx->result_info_->statistics.edges_created++;
+        // LOG_DEBUG()<<"create Edge:"<<euid.tid<<","<<euid.eid;
         if (!edge_variable.empty()) {
             /* There could be multiple match,
              * e.g. MATCH (a:Film),(b:City) CREATE (a)-[r:BORN_IN]->(b)  */

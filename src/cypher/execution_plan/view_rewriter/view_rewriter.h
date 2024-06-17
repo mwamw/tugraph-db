@@ -183,20 +183,33 @@ namespace cypher{
 #endif
                     return false;
                 }
-            }
-            if(view_node->Label()!=target_node->Label()){
+                if(view_node->Label()!=target_node->Label()){
 #ifndef NDEBUG
                 LOG_DEBUG()<<"match feasible end7";
 #endif
                 return false;
+                }
+                if(!(view_node->Prop()==target_node->Prop())){
+                    return false;
+                }
             }
-            //TODO:点属性一致
-            // if(view_node->Prop()!=target_node->Prop()){
-            //     return false;
-            // }
+            else{
+                //view_node没有标签意味着没有限制，target_node是什么都行
+                //如果是target_node没有标签，那么有部分是符合view_node的，这个要加吗？
+                if(view_node->Label().size()!=0 && view_node->Label()!=target_node->Label()){
+#ifndef NDEBUG
+                    LOG_DEBUG()<<"match feasible end7";
+#endif
+                    return false;
+                }
+
+                if(!(view_node->Prop().Empty()) && !(view_node->Prop()==target_node->Prop())){
+                    return false;
+                }
 #ifndef NDEBUG
             LOG_DEBUG()<<"match feasible end8";
 #endif
+            }
             return true;
         }
 
@@ -301,7 +314,8 @@ namespace cypher{
 #endif
                 return false;
             }
-            //TODO:属性一致
+            //TODO:属性一致，添加边的属性
+
             return true;
         }
 
