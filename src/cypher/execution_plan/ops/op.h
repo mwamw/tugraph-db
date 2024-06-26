@@ -70,6 +70,7 @@ enum OpType {
 };
 
 struct OpStats {
+    size_t db_hit=0;
     size_t profileRecordCount = 0;  // Number of records generated.
     double profileExecTime = .0;    // Operation total execution time in ms.
 };
@@ -90,6 +91,8 @@ struct OpBase {
         OP_OK = 4,
         OP_ERR = 8,
     };
+
+    bool profile_ = false;
 
     OpBase() = default;
 

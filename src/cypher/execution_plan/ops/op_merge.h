@@ -112,6 +112,7 @@ class OpMerge : public OpBase {
                             break;
                         }
                         _iit->Next();
+
                     }
                     break;
                 }
@@ -130,6 +131,7 @@ class OpMerge : public OpBase {
             valid_ = false;
             while (_iit->IsValid()) {
                 _iit->Next();
+
                 if (_iit->IsValid() && CheckFields()) {
                     valid_ = true;
                     break;
@@ -184,6 +186,7 @@ class OpMerge : public OpBase {
             do {
                 match_vids.emplace_back(vertex.GetVid());
                 vertex.Next();
+                if(profile_)stats.db_hit++;
             } while (vertex.IsValid());
             auto vit = ctx->txn_->GetTxn()->GetVertexIterator();
             for (auto vid : match_vids) {
@@ -239,6 +242,7 @@ class OpMerge : public OpBase {
             while (src.IsValid()) {
                 src_ids.emplace_back(src.GetVid());
                 src.Next();
+                if(profile_)stats.db_hit++;
             }
         }
         if (dst.IsMatch()) {
@@ -247,6 +251,7 @@ class OpMerge : public OpBase {
             while (dst.IsValid()) {
                 dst_ids.emplace_back(dst.GetVid());
                 dst.Next();
+                if(profile_)stats.db_hit++;
             }
         }
         for (auto src_id : src_ids) {
@@ -268,6 +273,7 @@ class OpMerge : public OpBase {
                         }
                     }
                     eit.Next();
+                    if(profile_)stats.db_hit++;
                 }
                 if (!match_eids.empty()) {
                     /* ON MATCH */

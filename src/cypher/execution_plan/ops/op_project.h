@@ -78,17 +78,32 @@ class Project : public OpBase {
     }
 
     OpResult Initialize(RTContext *ctx) override {
+#ifndef NDEBUG
+        LOG_DEBUG()<<"project parent size:"<<parent->children.size();
+#endif
         if (!children.empty()) {
             auto &child = children[0];
+#ifndef NDEBUG
+            LOG_DEBUG()<<"project parent size3:"<<parent->children.size();
+#endif
             auto res = child->Initialize(ctx);
+#ifndef NDEBUG
+            LOG_DEBUG()<<"project parent size4:"<<parent->children.size();
+#endif
             if (res != OP_OK) return res;
         }
         /* projection */
         record = std::make_shared<Record>(return_elements_.size());
+#ifndef NDEBUG
+        LOG_DEBUG()<<"project parent size2:"<<parent->children.size();
+#endif
         return OP_OK;
     }
 
     OpResult RealConsume(RTContext *ctx) override {
+#ifndef NDEBUG
+        LOG_DEBUG()<<"project consume start";
+#endif
         OpResult res = OP_OK;
         std::shared_ptr<Record> r;
         if (!children.empty()) {
@@ -110,6 +125,9 @@ class Project : public OpBase {
             record->values[re_idx++] = v;
             // TODO(anyone) handle alias
         }
+#ifndef NDEBUG
+        LOG_DEBUG()<<"project consume end";
+#endif
         return OP_OK;
     }
 

@@ -41,6 +41,7 @@ class NodeIndexSeek : public OpBase {
             return OP_OK;
         }
         it_->Next();
+        if(profile_)stats.db_hit++;
         return it_->IsValid() ? OP_OK : OP_REFRESH;
     }
 
@@ -92,6 +93,7 @@ class NodeIndexSeek : public OpBase {
             // Weak index iterator
             it_->Initialize(ctx->txn_->GetTxn().get(), node_->Label(), field_, value);
         }
+        if(profile_)stats.db_hit++;
         consuming_ = false;
         return OP_OK;
     }

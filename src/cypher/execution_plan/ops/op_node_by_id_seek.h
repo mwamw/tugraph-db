@@ -62,6 +62,7 @@ class NodeByIdSeek : public OpBase {
         record->values[node_rec_idx_].node = node_;
         record->SetParameter(ctx->param_tab_);
         node_->ItRef()->Initialize(ctx->txn_->GetTxn().get(), lgraph::VIter::VERTEX_ITER);
+        if(profile_)stats.db_hit++;
         return OP_OK;
     }
 
@@ -72,6 +73,7 @@ class NodeByIdSeek : public OpBase {
         if (!it_ || !it_->IsValid()) return OP_DEPLETED;
         while (idx_ < target_vids_.size()) {
             if (it_->Goto(target_vids_[idx_])) {
+                if(profile_)stats.db_hit++;
                 if (label_.empty() || it_->GetLabel() == label_) {
                     idx_++;
                     return OP_OK;

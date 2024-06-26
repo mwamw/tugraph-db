@@ -36,6 +36,7 @@ class NodeIndexSeekDynamic : public OpBase {
     OpResult HandOff() {
         if (!it_ || !it_->IsValid()) return OP_REFRESH;
         it_->Next();
+        if(profile_)stats.db_hit++;
         return it_->IsValid() ? OP_OK : OP_REFRESH;
     }
 
@@ -122,6 +123,7 @@ class NodeIndexSeekDynamic : public OpBase {
                 // Weak index iterator
                 it_->Initialize(ctx->txn_->GetTxn().get(), node_->Label(), field_, value);
             }
+            if(profile_)stats.db_hit++;
             if (it_->IsValid()) return OP_OK;
         }
         return OP_DEPLETED;

@@ -63,6 +63,7 @@ class NodeByLabelScanDynamic : public OpBase {
         record->SetParameter(ctx->param_tab_);
         node_->ItRef()->Initialize(ctx->txn_->GetTxn().get(), lgraph::VIter::LABEL_VERTEX_ITER,
                                    node_->Label());
+        if(profile_)stats.db_hit++;
         return OP_OK;
     }
 
@@ -84,6 +85,7 @@ class NodeByLabelScanDynamic : public OpBase {
             consuming_ = true;
         } else {
             it_->Next();
+            if(profile_)stats.db_hit++;
             if (!it_->IsValid()) return OP_DEPLETED;
         }
 #ifndef NDEBUG

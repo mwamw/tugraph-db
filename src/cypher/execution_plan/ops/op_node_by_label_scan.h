@@ -53,15 +53,21 @@ class NodeByLabelScan : public OpBase {
 
     OpResult Initialize(RTContext *ctx) override {
         // allocate a new record
+        // LOG_DEBUG()<< "NodeByLabelScan::Initialize rec length:"<<rec_length_;
+        // LOG_DEBUG()<<"label scan grand grand parent size:"<<parent->parent->parent->children.size();
         record = std::make_shared<Record>(rec_length_, sym_tab_, ctx->param_tab_);
         record->values[node_rec_idx_].type = Entry::NODE;
         record->values[node_rec_idx_].node = node_;
         // transaction allocated before in plan:execute
         // TODO(anyone) remove patternGraph's state (ctx)
+        // LOG_DEBUG()<<"label scan grand grand parent size2:"<<parent->parent->parent->children.size();
         auto primary_filed = ctx->txn_->GetVertexPrimaryField(node_->Label());
+        // LOG_DEBUG()<<"label scan grand grand parent size3:"<<parent->parent->parent->children.size();
         node_->ItRef()->Initialize(ctx->txn_->GetTxn().get(), lgraph::VIter::INDEX_ITER,
                                    node_->Label(), primary_filed,
                                    lgraph::FieldData(), lgraph::FieldData());
+        // LOG_DEBUG()<<"label scan grand grand parent size4:"<<parent->parent->parent->children.size();
+        if(profile_)stats.db_hit++;
         return OP_OK;
     }
 
@@ -77,6 +83,7 @@ class NodeByLabelScan : public OpBase {
             consuming_ = true;
         } else {
             it_->Next();
+            if(profile_)stats.db_hit++;
             if (!it_->IsValid()) return OP_DEPLETED;
         }
 #ifndef NDEBUG

@@ -186,11 +186,24 @@ class ProduceResults : public OpBase {
     } state_;
 
  public:
+    ProduceResults(bool profile) : OpBase(OpType::PRODUCE_RESULTS, "Produce Results") {
+        profile_=profile;
+        state_ = Uninitialized;
+    }
     ProduceResults() : OpBase(OpType::PRODUCE_RESULTS, "Produce Results") {
         state_ = Uninitialized;
     }
 
+    void InitProfile(OpBase* root){
+        root->profile_=profile_;
+        for(auto child:root->children){    
+            InitProfile(child);
+        }
+    }
+
     OpResult Initialize(RTContext *ctx) override {
+        // LOG_DEBUG()<<"produce init start child size:"<<children.size();
+        InitProfile(this);
         if (!children.empty()) {
             children[0]->Initialize(ctx);
         }
@@ -206,6 +219,9 @@ class ProduceResults : public OpBase {
         }
         if (children.empty()) return OP_DEPLETED;
         if (ctx->bolt_conn_) {
+#ifndef NDEBUG
+            LOG_DEBUG()<<"produce consume start 1";
+#endif
             if (ctx->bolt_conn_->has_closed()) {
                 LOG_INFO() << "The bolt connection is closed, cancel the op execution.";
                 return OP_ERR;
@@ -313,13 +329,23 @@ class ProduceResults : public OpBase {
                     session->ps.Reset();
                 }
             }
+            // LOG_DEBUG()<<"produce consume end 1";
             return OP_OK;
         } else {
+#ifndef NDEBUG
+            LOG_DEBUG()<<"produce consume start child size:"<<children.size();
+#endif
             auto child = children[0];
             auto res = child->Consume(ctx);
+            LOG_DEBUG()<<"produce child consume:"<<res;
             if (res != OP_OK) return res;
+            LOG_DEBUG()<<"produce consume mutable record";
             auto record = ctx->result_->MutableRecord();
+            LOG_DEBUG()<<"produce consume RRToU";
             RRecordToURecord(ctx->txn_.get(), ctx->result_->Header(), child->record, *record);
+#ifndef NDEBUG
+            LOG_DEBUG()<<"produce consume end";
+#endif
             return OP_OK;
         }
     }
