@@ -551,10 +551,16 @@ void BuiltinProcedure::DbDeleteLabel(RTContext *ctx, const Record *record, const
     }
     ifs.close();
     nlohmann::json new_j;
-    for (auto& element : j) {
-        std::string view_name = element["view_name"];
+    for (auto& element : j.at(0).items()) {
+        std::string view_name = element.key();
         if(view_name==label)continue;
-        else new_j.push_back(element);
+        else {
+            if(new_j.size()==0)
+                new_j.push_back(element);
+            else{
+                new_j[0][view_name] = element.value();
+            }
+        }
     }
     std::ofstream ofs(file_path);
     ofs << new_j;

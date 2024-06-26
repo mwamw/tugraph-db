@@ -58,8 +58,10 @@ class ExpandAll : public OpBase {
         }
         ifs.close();
         std::set<std::string> view_types;
-        for (auto& element : j) {
-            view_types.emplace(element["view_name"]);
+        if(j.size()>0){
+            for(auto element:j.at(0).items()){
+                view_types.emplace(element.key());
+            }
         }
         return view_types;
     }
@@ -91,12 +93,16 @@ class ExpandAll : public OpBase {
             break;
         }
         // LOG_DEBUG()<<"view list:"<<*(_GetViewTypes(ctx).begin());
+        // LOG_DEBUG()<<"initialize edge";
         if(types.empty()){
+            // LOG_DEBUG()<<"view_types empty:"<<view_types_.empty();
             eit_->Initialize(ctx->txn_->GetTxn().get(), iter_type, start_->PullVid(), view_types_);
         }
         else
         //////////////////////
             eit_->Initialize(ctx->txn_->GetTxn().get(), iter_type, start_->PullVid(), types);
+        // LOG_DEBUG()<<"initialize edge end";
+        if(profile_)stats.db_hit++;
     }
 
     bool _CheckToSkipEdgeFilter(RTContext *ctx) const {
@@ -122,6 +128,7 @@ class ExpandAll : public OpBase {
         auto nbr_it = ctx->txn_->GetTxn()->GetVertexIterator(eit_->GetNbr(expand_direction_));
         while (ctx->txn_->GetTxn()->GetVertexLabel(nbr_it) != neighbor_->Label()) {
             eit_->Next();
+            if(profile_)stats.db_hit++;
             if (!eit_->IsValid()) return false;
             nbr_it.Goto(eit_->GetNbr(expand_direction_));
             CYPHER_THROW_ASSERT(nbr_it.IsValid());
@@ -147,6 +154,7 @@ class ExpandAll : public OpBase {
             _InitializeEdgeIter(ctx);
             while (_CheckToSkipEdge(ctx)) {
                 eit_->Next();
+                if(profile_)stats.db_hit++;
             }
             if (!eit_->IsValid() || !_FilterNeighborLabel(ctx)) return OP_REFRESH;
             /* When relationship is undirected, GetNbr() will get src for out_edge_iterator
@@ -162,6 +170,7 @@ class ExpandAll : public OpBase {
         pattern_graph_->VisitedEdges().Erase(*eit_);
         do {
             eit_->Next();
+            if(profile_)stats.db_hit++;
         } while (_CheckToSkipEdge(ctx));
         if (!eit_->IsValid() || !_FilterNeighborLabel(ctx)) return OP_REFRESH;
         neighbor_->PushVid(eit_->GetNbr(expand_direction_));

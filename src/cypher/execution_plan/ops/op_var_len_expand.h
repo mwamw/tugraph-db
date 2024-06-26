@@ -51,13 +51,16 @@ class VarLenExpand : public OpBase {
         }
         ifs.close();
         std::set<std::string> view_types;
-        for (auto& element : j) {
-            view_types.emplace(element["view_name"]);
+        if(j.size()>0){
+            for(auto element:j.at(0).items()){
+                view_types.emplace(element.key());
+            }
         }
         return view_types;
     }
 
     void _InitializeEdgeIter(RTContext *ctx, int64_t vid, lgraph::EIter &eit) {
+        stats.db_hit++;
         auto &types = relp_->Types();
         auto iter_type = lgraph::EIter::NA;
         // switch (expand_direction_) {
@@ -250,6 +253,10 @@ class VarLenExpand : public OpBase {
             (ctx->path_unique_ && pattern_graph_->VisitedEdges().Contains(eits_[k - 1]))) {
             do {
                 eits_[k - 1].Next();
+                if(profile_){
+                    m_expand_cnt[k-1]++;
+                    stats.db_hit++;
+                }
             } while (eits_[k - 1].IsValid() && ctx->path_unique_ &&
                      pattern_graph_->VisitedEdges().Contains(eits_[k - 1]));
         }
@@ -264,11 +271,17 @@ class VarLenExpand : public OpBase {
             }
             while (ctx->path_unique_ && pattern_graph_->VisitedEdges().Contains(eits_[k - 1])) {
                 eits_[k - 1].Next();
+                if(profile_){
+                    m_expand_cnt[k-1]++;
+                    stats.db_hit++;
+                }
             }
         } while (!eits_[k - 1].IsValid());
         if (!eits_[k - 1].IsValid()) return -1;
         relp_->path_.Append(eits_[k - 1].GetUid());
         if (ctx->path_unique_) pattern_graph_->VisitedEdges().Add(eits_[k - 1]);
+        if(profile_)
+            m_node_cnt[k]++;
         return eits_[k - 1].GetNbr(expand_direction_);
     }
 
@@ -310,6 +323,8 @@ class VarLenExpand : public OpBase {
                 while (ctx->path_unique_ &&
                        pattern_graph_->VisitedEdges().Contains(eits_[hop_ - 1])) {
                     eits_[hop_ - 1].Next();
+                    m_expand_cnt[hop_-1]++;
+                    stats.db_hit++;
                 }
             } while (!eits_[hop_ - 1].IsValid());
             neighbor_->PushVid(eits_[hop_ - 1].GetNbr(expand_direction_));
@@ -352,6 +367,9 @@ class VarLenExpand : public OpBase {
     std::string view_path_;
     std::set<std::string> view_types_;
 
+    std::vector<size_t> m_node_cnt;
+    std::vector<size_t> m_expand_cnt;
+
     VarLenExpand(PatternGraph *pattern_graph, Node *start, Node *neighbor, Relationship *relp)
         : OpBase(OpType::VAR_LEN_EXPAND, "Variable Length Expand"),
           pattern_graph_(pattern_graph),
@@ -392,6 +410,7 @@ class VarLenExpand : public OpBase {
           collect_all_(false),
           eits_(relp_->ItsRef()),
           view_path_(view_path) {
+        
         view_types_ = _GetViewTypes(view_path_);
         modifies.emplace_back(neighbor_->Alias());
         modifies.emplace_back(relp_->Alias());
@@ -408,6 +427,9 @@ class VarLenExpand : public OpBase {
         nbr_rec_idx_ = dit->second.id;
         relp_rec_idx_ = rit->second.id;
         state_ = Uninitialized;
+
+        m_node_cnt.resize(max_hop_+1);
+        m_expand_cnt.resize(max_hop_);
     }
 
     OpResult Initialize(RTContext *ctx) override {

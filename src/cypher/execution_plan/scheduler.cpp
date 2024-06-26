@@ -61,7 +61,7 @@ bool Scheduler::DetermineReadOnly(cypher::RTContext *ctx,
     }
 }
 
-void AddElement(std::string file_path, std::string view_name, std::string start_node_label, std::string end_node_label, std::string query){
+void AddView(std::string file_path, std::string view_name, std::string start_node_label, std::string end_node_label, std::string query,size_t db_hit,size_t result_num){
     std::ifstream ifs(file_path);
 
     // 检查文件是否成功打开
@@ -79,17 +79,63 @@ void AddElement(std::string file_path, std::string view_name, std::string start_
     }
     ifs.close();
     nlohmann::json new_element = {
-        {"view_name", view_name},
-        {"start_node_label", start_node_label},
-        {"end_node_label", end_node_label},
-        {"query", query}
+        {view_name, {
+            {"start_node_label", start_node_label},
+            {"end_node_label", end_node_label},
+            {"query", query},
+            {"db_hit",db_hit},
+            {"result_num",result_num}
+        }}
     };
-
-    j.push_back(new_element);
+    // nlohmann::json final_element={
+    //     {view_name,new_element}
+    // };
+    if(j.size()==0){
+        j.push_back(new_element);
+    }
+    else{
+        j[0][view_name] = new_element[view_name];
+        // j[0].emplace_back(new_element);
+    }
+    // j.push_back(final_element);
     std::ofstream ofs(file_path);
     ofs << j;
     ofs.close();
 }
+
+// void UpdateView(std::string file_path, std::string input_view_name, std::string start_node_label, std::string end_node_label, std::string query,size_t db_hit,size_t result_num){
+//     // std::string file_path="/data/view/"+ctx->graph_+".json";
+//     std::ifstream ifs(file_path);
+//     nlohmann::json j;
+//     try {
+//         ifs >> j;
+//     } catch (nlohmann::json::parse_error& e) {
+//         j = nlohmann::json::array();
+//     }
+//     ifs.close();
+//     nlohmann::json new_j;
+//     for (auto& element : j.items()) {
+//         std::string view_name = element.key();
+//         if(view_name==input_view_name){
+//             nlohmann::json new_element = {
+//                 {"start_node_label", start_node_label},
+//                 {"end_node_label", end_node_label},
+//                 {"query", query},
+//                 {"db_hit",db_hit},
+//                 {"result_num",result_num}
+//             };
+//             nlohmann::json final_element={
+//                 {view_name,new_element}
+//             };
+
+//             new_j.push_back(final_element);
+//         }
+//         else new_j.push_back(element);
+//     }
+//     std::ofstream ofs(file_path);
+//     ofs << new_j;
+//     ofs.close();
+// }
 
 // void Scheduler::UpdateView(RTContext *ctx){
 //     LOG_DEBUG() << "Update view";
@@ -177,7 +223,6 @@ void AddElement(std::string file_path, std::string view_name, std::string start_
 //                 data = plan->DumpGraph();
 //             }
 //             else{ //创建视图
-//             // TODO 是否不需要给视图的Schema加上起点终点的标签限制？
 //                 LOG_DEBUG() << "s1";
 //                 const std::vector<cypher::PatternGraph>& pattern_graphs=plan->GetPatternGraphs();
 //                 LOG_DEBUG() << "new visitor s1";
@@ -328,12 +373,15 @@ const std::string Scheduler::EvalCypher(RTContext *ctx, const std::string &scrip
         else if(visitor.CommandType()==parser::CmdType::OPTIMIZE)
             plan.get()->SetOptimize(true);
         // LOG_DEBUG()<<"EvalCypherWithoutNewTxn txn exist6:"<<(ctx->txn_!=nullptr);
-        plan->Build(visitor.GetQuery(), visitor.CommandType(), ctx);
+        LOG_DEBUG()<<"build start";
+        plan->Build(visitor.GetQuery(), visitor.CommandType(), ctx,visitor.CommandType()==parser::CmdType::PROFILE);
+        LOG_DEBUG()<<"build end";
         // LOG_DEBUG()<<"EvalCypherWithoutNewTxn txn exist7:"<<(ctx->txn_!=nullptr);
         plan->Validate(ctx);
         // LOG_DEBUG()<<"EvalCypherWithoutNewTxn txn exist3:"<<(ctx->txn_!=nullptr);
-        LOG_DEBUG() << "Command Type" <<plan->CommandType(); // de
-        if (plan->CommandType() != parser::CmdType::QUERY && plan->CommandType() != parser::CmdType::MAINTENANCE) {
+        // LOG_DEBUG() << "Command Type" <<plan->CommandType(); // de
+        if (plan->CommandType() != parser::CmdType::QUERY && plan->CommandType() != parser::CmdType::MAINTENANCE
+                && plan->CommandType() != parser::CmdType::PROFILE) {
             ctx->result_info_ = std::make_unique<ResultInfo>();
             ctx->result_ = std::make_unique<lgraph::Result>();
             std::string header, data;
@@ -341,8 +389,9 @@ const std::string Scheduler::EvalCypher(RTContext *ctx, const std::string &scrip
                 header = "@plan";
                 data = plan->DumpPlan(0, false);
             } else if (plan->CommandType() == parser::CmdType::PROFILE){
-                header = "@profile";
-                data = plan->DumpGraph();
+                // header = "@profile";
+                // TODO : Profile
+                // data = plan->DumpGraph();
             }
             else if(visitor.CommandType() == parser::CmdType::OPTIMIZE) {
                 LOG_DEBUG()<<"optimize start";
@@ -368,11 +417,12 @@ const std::string Scheduler::EvalCypher(RTContext *ctx, const std::string &scrip
                 auto view_name=new_visitor.GetViewName();
                 auto constraints=new_visitor.GetConstraints();
                 auto new_query=new_visitor.GetRewriteQuery();
+                auto profile_new_query="profile "+new_query;
                 LOG_DEBUG() << "hhh";
                 // std::string create_query="CALL db.createEdgeLabel('"+view_name+"', '[[\""+constraints.first+"\",\""+constraints.second+"\"]]','is_view',bool,true)";
                 std::string create_query="CALL db.createEdgeLabel('"+view_name+"', '[]')";
-                std::cout<<"create query: "<<create_query<<std::endl;
-                std::cout<<"new query: "<<new_query<<std::endl;
+                // std::cout<<"create query: "<<create_query<<std::endl;
+                // std::cout<<"new query: "<<new_query<<std::endl;
                 elapsed.t_compile = fma_common::GetTime() - t0;
                 ElapsedTime temp;
                 if(is_with_new_txn)
@@ -384,10 +434,10 @@ const std::string Scheduler::EvalCypher(RTContext *ctx, const std::string &scrip
                 if(parent_dir.end()[-1]=='/')parent_dir.pop_back();
                 std::string file_path=parent_dir+"/view/"+ctx->graph_+".json";
                 // std::string file_path="/data/view/"+ctx->graph_+".json";
-                AddElement(file_path,view_name,constraints.first,constraints.second,new_query);
+                // AddView(file_path,view_name,constraints.first,constraints.second,new_query,0,0);
                 
                 // 为重写后的语句生成执行计划
-                ANTLRInputStream new_input(new_query);
+                ANTLRInputStream new_input(profile_new_query);
                 LcypherLexer new_lexer(&new_input);
                 CommonTokenStream new_tokens(&new_lexer);
                 LcypherParser new_parser(&new_tokens);
@@ -398,7 +448,7 @@ const std::string Scheduler::EvalCypher(RTContext *ctx, const std::string &scrip
                 LOG_DEBUG() << "-----CLAUSE TO STRING-----";
                 plan = std::make_shared<ExecutionPlan>();
                 plan->SetCreateView(true);
-                plan->Build(new_base_visitor.GetQuery(), new_base_visitor.CommandType(), ctx);
+                plan->Build(new_base_visitor.GetQuery(), new_base_visitor.CommandType(), ctx,true);
                 // LOG_DEBUG()<<"EvalCypherWithoutNewTxn txn exist7:"<<(ctx->txn_!=nullptr);
                 plan->Validate(ctx);
                 
@@ -422,6 +472,22 @@ const std::string Scheduler::EvalCypher(RTContext *ctx, const std::string &scrip
                 //     EvalCypher(ctx,new_query,temp);
                 // else
                 //     EvalCypherWithoutNewTxn(ctx,new_query,temp);
+                // produce results->Create->Apply->Argument或Project
+                size_t db_hit=plan->GetDBHit(),result_num=plan->Root()->children[0]->children[0]->children[1]->stats.profileRecordCount;
+                // std::string result=ctx->result_->Dump(false);
+                // LOG_DEBUG()<<"result size:"<<ctx->result_->Header().size();
+                // LOG_DEBUG()<<result;
+                // if(ctx->result_->Header().size()==2){
+                //     std::string result=ctx->result_->Dump(false);
+                //     LOG_DEBUG()<<result;
+                //     nlohmann::json j = nlohmann::json::parse(result);
+                //     auto db_hit_str=j.at("db_hit").get<std::string>();
+                //     auto result_num_str=j.at("result_num").get<std::string>();
+                //     db_hit=std::stoull(db_hit_str);
+                //     result_num=std::stoull(result_num_str);
+                // }
+                LOG_DEBUG()<<"db_hit:"<<db_hit<<",result num:"<<result_num;
+                AddView(file_path,view_name,constraints.first,constraints.second,new_query,db_hit,result_num);
                 ctx->result_info_ = std::make_unique<ResultInfo>();
                 ctx->result_ = std::make_unique<lgraph::Result>();
 
@@ -487,6 +553,17 @@ const std::string Scheduler::EvalCypher(RTContext *ctx, const std::string &scrip
     // if(!plan->ReadOnly())UpdateView(ctx);
     elapsed.t_total = fma_common::GetTime() - t0;
     elapsed.t_exec = elapsed.t_total - elapsed.t_compile;
+    if (plan->CommandType() == parser::CmdType::PROFILE){
+        size_t db_hit=plan->GetDBHit();
+        size_t result_num=plan->Root()->stats.profileRecordCount;
+        ctx->result_info_ = std::make_unique<ResultInfo>();
+        ctx->result_ = std::make_unique<lgraph::Result>();
+
+        ctx->result_->ResetHeader({{"db_hit", lgraph_api::LGraphType::STRING},{"result_num", lgraph_api::LGraphType::STRING}});
+        auto r = ctx->result_->MutableRecord();
+        r->Insert("db_hit", lgraph::FieldData(std::to_string(db_hit)));
+        r->Insert("result_num", lgraph::FieldData(std::to_string(result_num)));
+    }
     return std::string();
 
 }

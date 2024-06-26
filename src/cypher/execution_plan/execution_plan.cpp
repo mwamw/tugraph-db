@@ -794,7 +794,7 @@ void ExecutionPlan::_BuildReturnOps(const parser::QueryPart &part,
                                     const cypher::PatternGraph &pattern_graph,
                                     cypher::OpBase *&root) {
     std::vector<OpBase *> ops;
-    auto result = new ProduceResults();
+    auto result = new ProduceResults(_is_profile);
     ops.emplace_back(result);
     if (_result_info.limit >= 0) {
         auto limit = new Limit(_result_info.limit);
@@ -907,7 +907,7 @@ void ExecutionPlan::_BuildClause(const parser::Clause &clause, const parser::Que
     }
     if (&clause == &part.clauses.back()) {
         if (!part.return_clause && !part.with_clause) {
-            auto result = new ProduceResults();
+            auto result = new ProduceResults(_is_profile);
             _UpdateStreamRoot(result, root);
         }
     }
@@ -1074,6 +1074,7 @@ OpBase *ExecutionPlan::BuildPart(const parser::QueryPart &part, int part_id) {
         if(_view_pattern_graphs.size()>0)
             pattern_graph.symbol_table.Recover();
     }
+    LOG_DEBUG()<<"rewrite end:";
     // for(size_t i=0;i<_view_pattern_graphs.size();i++){
     //     auto view_pattern_graph=&_view_pattern_graphs.at(i);
     //     ViewRewriter view_rewriter(&pattern_graph,view_pattern_graph,);
@@ -1083,14 +1084,17 @@ OpBase *ExecutionPlan::BuildPart(const parser::QueryPart &part, int part_id) {
     /* Build result_set info (header etc.) for current part */
     _result_info = ResultInfo();
     BuildResultSetInfo(part, _result_info);
-
+    LOG_DEBUG()<<"build part 1";
     _BuildArgument(part, pattern_graph, segment_root);
+    LOG_DEBUG()<<"build part 3";
     for (auto &clause : part.clauses) {
+        LOG_DEBUG()<<"build part clause"<<clause.type;
         _BuildClause(clause, part, pattern_graph, segment_root);
+        LOG_DEBUG()<<"build part end"<<clause.type;
     }
-
+    LOG_DEBUG()<<"build part 2";
     _PlaceFilterOps(part, segment_root);
-
+    LOG_DEBUG()<<"build part end:";
     return segment_root;
 }
 
@@ -1306,12 +1310,28 @@ void ExecutionPlan::GetViewPatternGraphs(cypher::RTContext *ctx){
     } catch (nlohmann::json::parse_error& e) {
         j = nlohmann::json::array();
     }
+    if(j.size()==0)return;
     std::vector<std::string> view_queries;
+    // nlohmann::json sort_j;
+    std::vector<std::pair<std::string, size_t>> opts;
+    LOG_DEBUG()<<"opt start";
+   for(auto element:j.at(0).items()){
+        size_t db_hit=element.value().at("db_hit");
+        size_t result_num=element.value().at("result_num");
+        opts.push_back(std::pair<std::string, size_t>(element.key(),db_hit-2*result_num));
+    }
+    LOG_DEBUG()<<"opt end";
+    std::sort(opts.begin(), opts.end(),
+        [](const std::pair<std::string, size_t>& a, const std::pair<std::string, size_t>& b) {
+            return a.second > b.second;
+        }
+    );
     // _view_pattern_graphs.resize(j.size());
-    for(size_t i=0;i<j.size();i++){
+    for(auto view:opts){
         using namespace parser;
         using namespace antlr4;
-        std::string query=j.at(i)["query"];
+        auto view_inf=j.at(0)[view.first];
+        std::string query=view_inf["query"];
         ANTLRInputStream input(query);
         LcypherLexer lexer(&input);
         CommonTokenStream tokens(&lexer);
@@ -1331,7 +1351,7 @@ void ExecutionPlan::GetViewPatternGraphs(cypher::RTContext *ctx){
         BuildQueryGraph(visitor.GetQuery().at(0).parts.at(0),*pattern_graph);
         LOG_DEBUG()<<"view graph:";
         LOG_DEBUG()<<pattern_graph->DumpGraph();
-        _view_pattern_graphs[j.at(i)["view_name"]]=pattern_graph;
+        _view_pattern_graphs[view.first]=pattern_graph;
         // _view_pattern_graphs[j.at(i)["view_name"]]=std::move(pattern_graph);
         LOG_DEBUG()<<"create view graph end";
     }
@@ -1339,6 +1359,12 @@ void ExecutionPlan::GetViewPatternGraphs(cypher::RTContext *ctx){
 
 void ExecutionPlan::Build(const std::vector<parser::SglQuery> &stmt, parser::CmdType cmd,
                           cypher::RTContext *ctx) {
+    Build(stmt,cmd,ctx,false);
+}
+
+void ExecutionPlan::Build(const std::vector<parser::SglQuery> &stmt, parser::CmdType cmd,
+                          cypher::RTContext *ctx,bool profile) {
+    _is_profile=profile;
     // check return elements first
     if (!CheckReturnElements(stmt)) {
         throw lgraph::CypherException(
@@ -1347,7 +1373,9 @@ void ExecutionPlan::Build(const std::vector<parser::SglQuery> &stmt, parser::Cmd
     auto parent_dir=ctx->galaxy_->GetConfig().dir;
     if(parent_dir.end()[-1]=='/')parent_dir.pop_back();
     _view_path = parent_dir+"/view/"+ctx->graph_+".json";
+    LOG_DEBUG()<<"GetViewPatternGraphs";
     GetViewPatternGraphs(ctx);
+    LOG_DEBUG()<<"GetViewPatternGraphs end";
     // _view_path="/data/view/"+ctx->graph_+".json";
     _cmd_type = cmd;
     /* read_only = AND(parts read_only)
@@ -1471,6 +1499,7 @@ int ExecutionPlan::Execute(RTContext *ctx) {
         ctx->ac_db_.reset(nullptr);
         throw;
     }
+    if(_is_profile)_db_hit=CalculateDBHit(_root);
     // finialize, clean db, transaction
     if (ctx->txn_) {
         if (!ReadOnly() && ctx->optimistic_) {
@@ -1568,6 +1597,7 @@ int ExecutionPlan::ExecuteWithoutNewTxn(RTContext *ctx) {
         ctx->ac_db_.reset(nullptr);
         throw;
     }
+    if(_is_profile)_db_hit=CalculateDBHit(_root);
     // finialize, clean db, transaction
     // if (ctx->txn_) {
     //     if (!ReadOnly() && ctx->optimistic_) {
@@ -1592,6 +1622,16 @@ int ExecutionPlan::ExecuteWithoutNewTxn(RTContext *ctx) {
     if (entry_id != out_id) LOG_DEBUG() << "switch thread from: " << entry_id << " to " << out_id;
 #endif
     return 0;
+}
+
+size_t ExecutionPlan::CalculateDBHit(OpBase* root){
+    size_t result=root->stats.db_hit;
+    LOG_DEBUG()<<"op name:"<<root->name;
+    LOG_DEBUG()<<"db hit:"<<root->stats.db_hit;
+    for(auto child:root->children){
+        result+=CalculateDBHit(child);
+    }
+    return result;
 }
 
 const ResultInfo &ExecutionPlan::GetResultInfo() const { return _result_info; }

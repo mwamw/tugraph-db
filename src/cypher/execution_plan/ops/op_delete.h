@@ -50,9 +50,11 @@ class OpDelete : public OpBase {
             j = nlohmann::json::array();
         }
         ifs.close();
-        for (auto& element : j) {
-            view_names_.emplace(element["view_name"]);
-            view_queries_.emplace(element["query"]);
+        if(j.size()>0){
+            for(auto element:j.at(0).items()){
+                view_names_.emplace(element.key());
+                view_queries_.emplace(element.value().at("query"));
+            }
         }
     }
 

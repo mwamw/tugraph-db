@@ -500,6 +500,10 @@ namespace cypher{
                             auto &target_rhs_relp=target_graph_->GetRelationship(target_node->RhsRelps()[0]);
                             target_graph_->RemoveRelationship(target_rhs_relp.ID());
                         }
+                        else{
+                            auto &target_lhs_relp=target_graph_->GetRelationship(target_node->LhsRelps()[0]);
+                            target_graph_->RemoveRelationship(target_lhs_relp.ID());
+                        }
                     }
                 }
             }

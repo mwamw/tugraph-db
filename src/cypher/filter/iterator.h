@@ -801,12 +801,15 @@ class EIter {
         _type = type;
         switch (_type) {
         case OUT_EDGE:
+        case VIEW_OUT_EDGE:
             _oeit = new lgraph::graph::OutEdgeIterator(_txn->GetOutEdgeIterator(vid));
             break;
         case IN_EDGE:
+        case VIEW_IN_EDGE:
             _ieit = new lgraph::graph::InEdgeIterator(_txn->GetInEdgeIterator(vid));
             break;
         case BI_EDGE:
+        case BI_VIEW_EDGE:
             {
                 auto it = _txn->GetOutEdgeIterator(vid);
                 if (it.IsValid()) {
@@ -829,7 +832,7 @@ class EIter {
         _txn = txn;
         _type = type;
         ////////////////////////修改
-        if (relp_types.empty()) return Initialize(txn, type, vid);
+        // if (relp_types.empty()) return Initialize(txn, type, vid);
         switch (_type) {
         ////////////////////////
         case VIEW_OUT_EDGE:

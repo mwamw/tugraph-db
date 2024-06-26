@@ -319,12 +319,12 @@ RelpID PatternGraph::BuildRelationship(const parser::TUP_RELATIONSHIP_PATTERN &r
 }
 
 std::string PatternGraph::DumpGraph() const {
-    LOG_DEBUG()<<"Dump start";
+    // LOG_DEBUG()<<"Dump start";
     std::string line = "Current Pattern Graph:\n";
-    LOG_DEBUG()<<"node size:";
-    LOG_DEBUG()<<_nodes.size();
+    // LOG_DEBUG()<<"node size:";
+    // LOG_DEBUG()<<_nodes.size();
     for (auto &n : _nodes) {
-        LOG_DEBUG()<<"node dump:"<<n.Alias();
+        // LOG_DEBUG()<<"node dump:"<<n.Alias();
         auto derivation = n.derivation_ == Node::CREATED    ? "(CREATED)"
                           : n.derivation_ == Node::MERGED   ? "(MERGED)"
                           : n.derivation_ == Node::ARGUMENT ? "(ARGUMENT)"
@@ -335,9 +335,9 @@ std::string PatternGraph::DumpGraph() const {
         }
         line.append(fma_common::StringFormatter::Format("N[{}] {}:{} {} {}\n", std::to_string(n.ID()),
                                                         n.Alias(), n.Label(), derivation,is_referenced));
-        LOG_DEBUG()<<"node dump end";
+        // LOG_DEBUG()<<"node dump end";
     }
-    LOG_DEBUG()<<"node end";
+    // LOG_DEBUG()<<"node end";
     for (auto &r : _relationships) {
         auto direction = r.direction_ == parser::LEFT_TO_RIGHT   ? "-->"
                          : r.direction_ == parser::RIGHT_TO_LEFT ? "<--"
@@ -355,16 +355,16 @@ std::string PatternGraph::DumpGraph() const {
             "R[{} {} {}] {}:{} {} {}\n", std::to_string(r.Lhs()), direction, std::to_string(r.Rhs()),
             r.Alias(), types, derivation,is_referenced));
     }
-    LOG_DEBUG()<<"relp end";
+    // LOG_DEBUG()<<"relp end";
     for (auto &[symbol, symbol_node] : symbol_table.symbols) {
         line.append(fma_common::StringFormatter::Format(
             "Symbol: [{}] type({}), scope({}), symbol_id({})\n", symbol,
             cypher::SymbolNode::to_string(symbol_node.type),
             cypher::SymbolNode::to_string(symbol_node.scope), symbol_node.id));
     }
-    LOG_DEBUG()<<"symbol end";
+    // LOG_DEBUG()<<"symbol end";
     if (_nodes.empty() && _relationships.empty()) line.append("(EMPTY GRAPH)\n");
-    LOG_DEBUG()<<"Dump end";
+    // LOG_DEBUG()<<"Dump end";
     return line;
 }
 

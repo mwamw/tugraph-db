@@ -41,7 +41,7 @@ class PassManager {
         all_passes_.emplace_back(new PassVarLenExpandWithLimit());
         all_passes_.emplace_back(new LocateNodeByVid());
         all_passes_.emplace_back(new LocateNodeByIndexedProp());
-        all_passes_.emplace_back(new ParallelTraversal());
+        // all_passes_.emplace_back(new ParallelTraversal());
     }
 
     ~PassManager() {

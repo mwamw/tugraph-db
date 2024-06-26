@@ -45,6 +45,8 @@ class ExecutionPlan {
     bool _is_view_maintenance = false;
     bool _is_create_view=false;
     bool _is_optimize=false;
+    bool _is_profile=false;
+    size_t _db_hit=0;
 
     void _AddScanOp(const parser::QueryPart &part, const SymbolTable *sym_tab, Node *node,
                     std::vector<OpBase *> &ops, bool skip_arg_op);
@@ -111,6 +113,9 @@ class ExecutionPlan {
     void Build(const std::vector<parser::SglQuery> &stmt, parser::CmdType cmd,
                cypher::RTContext *ctx);
 
+    void Build(const std::vector<parser::SglQuery> &stmt, parser::CmdType cmd,
+               cypher::RTContext *ctx, bool profile);
+
     void Validate(cypher::RTContext *ctx);
 
     void Reset();
@@ -136,5 +141,7 @@ class ExecutionPlan {
     void SetMaintenance(bool is_view_maintenance) { _is_view_maintenance = is_view_maintenance; }
     void SetOptimize(bool is_optimize) { _is_optimize = is_optimize; }
     void SetCreateView(bool is_create_view) { _is_create_view = is_create_view; }
+    size_t GetDBHit(){return _db_hit;}
+    size_t CalculateDBHit(OpBase* root);
 };
 }  // namespace cypher

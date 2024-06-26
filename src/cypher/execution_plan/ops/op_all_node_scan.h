@@ -60,6 +60,8 @@ class AllNodeScan : public OpBase {
         // transaction allocated before in plan:execute
         // TODO(anyone) remove patternGraph's state (ctx)
         node_->ItRef()->Initialize(ctx->txn_->GetTxn().get(), lgraph::VIter::VERTEX_ITER);
+        if(profile_)
+            stats.db_hit++;
         return OP_OK;
     }
 
@@ -75,6 +77,8 @@ class AllNodeScan : public OpBase {
             consuming_ = true;
         } else {
             it_->Next();
+            if(profile_)
+                stats.db_hit++;
             if (!it_->IsValid()) return OP_DEPLETED;
         }
         return OP_OK;
