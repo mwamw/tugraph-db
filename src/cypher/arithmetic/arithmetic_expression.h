@@ -385,6 +385,16 @@ struct ArithOperandNode {
         } else if (type == AR_OPERAND_VARIADIC) {
             CYPHER_THROW_ASSERT(record.values.size() > (size_t)variadic.alias_idx);
             const auto &entry = record.values[variadic.alias_idx];
+            // std::cout<<"arithmetic"<<std::endl;
+            // if(variadic.alias.size()>0){
+            //     std::cout<<"arithmetic alias:"<<variadic.alias<<std::endl;
+            // }
+            // std::cout<<"arithmetic value length:"<<record.values.size()<<std::endl;
+            // for(size_t i=0;i<record.values.size();i++){
+            //     std::cout<<"arithmetic value"<<i<<":"<<record.values[i].ToString()<<std::endl;
+            // }
+            // std::cout<<"arithmetic alias idx:"<<variadic.alias_idx<<std::endl;
+            // std::cout<<"arithmetic :"<<entry.ToString()<<std::endl;
             switch (entry.type) {
             case Entry::NODE:
             case Entry::RELATIONSHIP:

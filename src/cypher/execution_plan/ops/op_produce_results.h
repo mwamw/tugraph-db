@@ -341,7 +341,7 @@ class ProduceResults : public OpBase {
             if (res != OP_OK) return res;
             LOG_DEBUG()<<"produce consume mutable record";
             auto record = ctx->result_->MutableRecord();
-            LOG_DEBUG()<<"produce consume RRToU";
+            LOG_DEBUG()<<"produce consume RRToU："<<child->record->ToString();
             RRecordToURecord(ctx->txn_.get(), ctx->result_->Header(), child->record, *record);
 #ifndef NDEBUG
             LOG_DEBUG()<<"produce consume end";

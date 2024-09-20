@@ -420,7 +420,12 @@ class RangeFilter : public Filter {
     bool DoFilter(cypher::RTContext *ctx, const cypher::Record &record) override {
         auto left = _ae_left.Evaluate(ctx, record);
         auto right = _ae_right.Evaluate(ctx, record);
+        // std::cout<<"Do filter"<<std::endl;
+        // std::cout<<"filter l:"<<left.ToString()<<std::endl;
+        // std::cout<<"filter r:"<<right.ToString()<<std::endl;
         if (left.type != right.type) return false;
+        // std::cout<<"filter l1:"<<left.ToString()<<std::endl;
+        // std::cout<<"filter r1:"<<right.ToString()<<std::endl;
         switch (_compare_op) {
         case lgraph::LBR_EQ:
             return left == right;

@@ -59,6 +59,9 @@ cypher::FieldData BuiltinFunction::Id(RTContext *ctx, const Record &record,
     if (args.size() != 2) CYPHER_ARGUMENT_ERROR();
     auto operand = args[1];
     auto r = operand.Evaluate(ctx, record);
+    // std::cout<<"arith operand:"<<operand.ToString()<<std::endl;
+    // std::cout<<"arith id:"<<r.ToString()<<std::endl;
+    // std::cout<<"arith is node:"<<r.IsNode()<<std::endl;
     // TODO(anyone) handle snapshot of node/relp
     if (r.IsNode()) {
         if (!VALIDATE_IT(r)) return {};
