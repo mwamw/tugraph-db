@@ -88,12 +88,26 @@ struct SymbolTable {
         for (auto &it : symbols) {
             if(it.second.scope==SymbolNode::Scope::ARGUMENT)argument_size++;
         }
-        int index=argument_size;
+        // int index=argument_size;
         for (auto &it : symbols) {
-            if(it.second.scope!=SymbolNode::Scope::ARGUMENT){
-                it.second.id=index;
-                index++;
+            // 如果超出界限，找到没有出现的最小id
+            if(it.second.id>=symbols.size() && it.second.scope!=SymbolNode::Scope::ARGUMENT){
+                std::vector<bool> present(symbols.size(), false);
+                for(auto &it2 : symbols){
+                    if(it2.second.id<symbols.size())
+                        present[it2.second.id]=true;
+                }
+                for(size_t i=0;i<symbols.size();i++){
+                    if(!present[i]){
+                        it.second.id=i;
+                        break;
+                    }
+                }
             }
+            // if(it.second.scope!=SymbolNode::Scope::ARGUMENT){
+            //     it.second.id=index;
+            //     index++;
+            // }
         }
     }
     void DumpTable() const;

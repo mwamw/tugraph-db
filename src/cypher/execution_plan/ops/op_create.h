@@ -85,28 +85,36 @@ class OpCreate : public OpBase {
         using namespace parser;
         using namespace antlr4;
         for(auto view_query:view_queries_){
-            ANTLRInputStream input(view_query);
-            LcypherLexer lexer(&input);
-            CommonTokenStream tokens(&lexer);
-            // std::cout <<"parser s1"<<std::endl; // de
-            LcypherParser parser(&tokens);
-            VarlenUnfoldVisitor visitor(parser.oC_Cypher());
-            auto unfold_queries=visitor.GetRewriteQueries();
-            for(auto unfold_query:unfold_queries){
+            // ANTLRInputStream input(view_query);
+            // LcypherLexer lexer(&input);
+            // CommonTokenStream tokens(&lexer);
+            // // std::cout <<"parser s1"<<std::endl; // de
+            // LcypherParser parser(&tokens);
+            // VarlenUnfoldVisitor visitor(parser.oC_Cypher());
+            // auto unfold_queries=visitor.GetRewriteQueries();
+            // for(auto unfold_query:unfold_queries){
                 // schema重写优化
-                cypher::ElapsedTime temp;
-                Scheduler scheduler;
-                auto new_unfold_query=scheduler.EvalCypherWithoutNewTxn(ctx,"optimize "+unfold_query,temp);
-                LOG_DEBUG()<<"unfold query:"<<unfold_query;
-                LOG_DEBUG()<<"new unfold query:"<<new_unfold_query;
+                // cypher::ElapsedTime temp;
+                // Scheduler scheduler;
+                // auto new_unfold_query=scheduler.EvalCypherWithoutNewTxn(ctx,"optimize "+unfold_query,temp);
+                // LOG_DEBUG()<<"unfold query:"<<unfold_query;
+                // LOG_DEBUG()<<"new unfold query:"<<new_unfold_query;
                 //获得视图更新语句
-                ANTLRInputStream input(new_unfold_query);
+                ANTLRInputStream input(view_query);
                 LcypherLexer lexer(&input);
                 CommonTokenStream tokens(&lexer);
                 // std::cout <<"parser s1"<<std::endl; // de
                 LcypherParser parser(&tokens);
                 ViewMaintenance visitor(parser.oC_Cypher(),label,edge_uid.eid,src_info,dst_info,true);
                 std::cout<<"View maintenance4: "<<std::endl;
+                // std::string rewrite_query=visitor.GetRewriteQueries();
+                // std::cout<<"View maintenance5: "<<rewrite_query<<std::endl;
+                // cypher::ElapsedTime temp;
+                // Scheduler scheduler;
+                // // scheduler.Eval(ctx,lgraph_api::GraphQueryType::CYPHER,"match (n) return count(n)",temp);
+                // LOG_DEBUG()<<"in create op txn exist:"<<(ctx->txn_!=nullptr);
+                // scheduler.EvalCypherWithoutNewTxn(ctx,rewrite_query,temp);
+                // std::cout<<"View maintenance6: "<<std::endl; 
                 std::vector<std::string> queries=visitor.GetRewriteQueries();
                 for(auto query:queries){
                     std::cout<<"View maintenance5: "<<query<<std::endl;
@@ -117,7 +125,7 @@ class OpCreate : public OpBase {
                     scheduler.EvalCypherWithoutNewTxn(ctx,query,temp);
                     std::cout<<"View maintenance6: "<<std::endl; 
                 }
-            }
+            // }
         }
     }
 

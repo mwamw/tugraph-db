@@ -73,20 +73,20 @@ class OpDelete : public OpBase {
         using namespace antlr4;
         for(auto view_query:view_queries_){
             std::cout<<"View maintenance3: "<<view_query<<std::endl;
-            ANTLRInputStream input(view_query);
-            LcypherLexer lexer(&input);
-            CommonTokenStream tokens(&lexer);
-            // std::cout <<"parser s1"<<std::endl; // de
-            LcypherParser parser(&tokens);
-            VarlenUnfoldVisitor visitor(parser.oC_Cypher());
-            auto unfold_queries=visitor.GetRewriteQueries();
-            for(auto unfold_auery:unfold_queries){
+            // ANTLRInputStream input(view_query);
+            // LcypherLexer lexer(&input);
+            // CommonTokenStream tokens(&lexer);
+            // // std::cout <<"parser s1"<<std::endl; // de
+            // LcypherParser parser(&tokens);
+            // VarlenUnfoldVisitor visitor(parser.oC_Cypher());
+            // auto unfold_queries=visitor.GetRewriteQueries();
+            // for(auto unfold_auery:unfold_queries){
                 // schema重写优化
-                cypher::ElapsedTime temp;
-                Scheduler scheduler;
-                auto new_unfold_query=scheduler.EvalCypherWithoutNewTxn(ctx,"optimize "+unfold_auery,temp);
+                // cypher::ElapsedTime temp;
+                // Scheduler scheduler;
+                // auto new_unfold_query=scheduler.EvalCypherWithoutNewTxn(ctx,"optimize "+unfold_auery,temp);
                 //获得视图更新语句
-                ANTLRInputStream input(new_unfold_query);
+                ANTLRInputStream input(view_query);
                 LcypherLexer lexer(&input);
                 CommonTokenStream tokens(&lexer);
                 // std::cout <<"parser s1"<<std::endl; // de
@@ -99,10 +99,11 @@ class OpDelete : public OpBase {
                     cypher::ElapsedTime temp;
                     Scheduler scheduler;
                     // scheduler.Eval(ctx,lgraph_api::GraphQueryType::CYPHER,"match (n) return count(n)",temp);
+                    LOG_DEBUG()<<"in create op txn exist:"<<(ctx->txn_!=nullptr);
                     scheduler.EvalCypherWithoutNewTxn(ctx,query,temp);
-                    std::cout<<"View maintenance6: "<<std::endl;
-                }
-            }
+                    std::cout<<"View maintenance6: "<<std::endl; 
+                } 
+            // }
         }
         std::cout<<"View maintenance7: "<<std::endl;
     }
@@ -131,20 +132,20 @@ class OpDelete : public OpBase {
         using namespace parser;
         using namespace antlr4;
         for(auto view_query:view_queries_){
-            ANTLRInputStream input(view_query);
-            LcypherLexer lexer(&input);
-            CommonTokenStream tokens(&lexer);
-            // std::cout <<"parser s1"<<std::endl; // de
-            LcypherParser parser(&tokens);
-            VarlenUnfoldVisitor visitor(parser.oC_Cypher());
-            auto unfold_queries=visitor.GetRewriteQueries();
-            for(auto unfold_auery:unfold_queries){
+            // ANTLRInputStream input(view_query);
+            // LcypherLexer lexer(&input);
+            // CommonTokenStream tokens(&lexer);
+            // // std::cout <<"parser s1"<<std::endl; // de
+            // LcypherParser parser(&tokens);
+            // VarlenUnfoldVisitor visitor(parser.oC_Cypher());
+            // auto unfold_queries=visitor.GetRewriteQueries();
+            // for(auto unfold_auery:unfold_queries){
                 // schema重写优化
-                cypher::ElapsedTime temp;
-                Scheduler scheduler;
-                auto new_unfold_query=scheduler.EvalCypherWithoutNewTxn(ctx,"optimize "+unfold_auery,temp);
+                // cypher::ElapsedTime temp;
+                // Scheduler scheduler;
+                // auto new_unfold_query=scheduler.EvalCypherWithoutNewTxn(ctx,"optimize "+unfold_auery,temp);
                 //获得视图更新语句
-                ANTLRInputStream input(new_unfold_query);
+                ANTLRInputStream input(view_query);
                 LcypherLexer lexer(&input);
                 CommonTokenStream tokens(&lexer);
                 // std::cout <<"parser s1"<<std::endl; // de
@@ -157,10 +158,11 @@ class OpDelete : public OpBase {
                     cypher::ElapsedTime temp;
                     Scheduler scheduler;
                     // scheduler.Eval(ctx,lgraph_api::GraphQueryType::CYPHER,"match (n) return count(n)",temp);
+                    LOG_DEBUG()<<"in create op txn exist:"<<(ctx->txn_!=nullptr);
                     scheduler.EvalCypherWithoutNewTxn(ctx,query,temp);
                     std::cout<<"View maintenance6: "<<std::endl; 
                 }
-            }
+            // }
         }
     }
 

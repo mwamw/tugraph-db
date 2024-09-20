@@ -335,20 +335,21 @@ namespace cypher{
             LOG_DEBUG()<<"now target id:"<<now_target_id;
 #endif
             if(now_view_id==-1){
-                now_view_id=start_node_id;
+                // now_view_id=start_node_id;
                 for(auto &target_node:target_graph_->GetNodes()){
+                    now_view_id=start_node_id;
                     if(NodeFeasible(now_view_id,target_node.ID())){
-                        now_view_id=start_node_id;
+                        // now_view_id=start_node_id;
                         now_target_id=target_node.ID();
                         view_to_target[now_view_id]=now_target_id;
                         target_to_view[now_target_id]=now_view_id;
                         if(VF2()){
                             return true;
                         }
-                        now_view_id=-1;
-                        now_target_id=-1;
                         view_to_target.erase(now_view_id);
                         target_to_view.erase(now_target_id);
+                        now_view_id=-1;
+                        now_target_id=-1;
                     }
                 }
             }
@@ -489,23 +490,48 @@ namespace cypher{
 
         void RewriteGraph(){
             // view至少两个点，当为两个点时，不用删点，更改边即可
-            if(target_to_view.size()<3){
+            for(auto pair : target_to_view){
+                LOG_DEBUG()<<"target to view :"<<pair.first<<","<<pair.second;
+            }
+            if(view_graph_->GetNodes().size()<3){
                 //TODO：增加边的相关匹配
-                for(auto match:target_to_view){
-                    auto view_node_id=match.second;
-                    if(view_node_id==start_node_id){
-                        auto target_node_id=match.first;
-                        auto target_node=&(target_graph_->GetNode(target_node_id));
-                        if(target_node->RhsDegree()==1){
-                            auto &target_rhs_relp=target_graph_->GetRelationship(target_node->RhsRelps()[0]);
-                            target_graph_->RemoveRelationship(target_rhs_relp.ID());
-                        }
-                        else{
-                            auto &target_lhs_relp=target_graph_->GetRelationship(target_node->LhsRelps()[0]);
+                NodeID target_start_id=view_to_target[start_node_id];
+                NodeID target_end_id=view_to_target[end_node_id];
+                auto target_start_node=&(target_graph_->GetNode(target_start_id));
+                bool find=false;
+                for(auto relp:target_start_node->RhsRelps()){
+                    auto &target_rhs_relp=target_graph_->GetRelationship(relp);
+                    if(target_rhs_relp.Rhs()==target_end_id){
+                        target_graph_->RemoveRelationship(target_rhs_relp.ID());
+                        find=true;
+                        break;
+                    }
+                }
+                if(!find){
+                    for(auto relp:target_start_node->LhsRelps()){
+                        auto &target_lhs_relp=target_graph_->GetRelationship(relp);
+                        if(target_lhs_relp.Lhs()==target_end_id){
                             target_graph_->RemoveRelationship(target_lhs_relp.ID());
+                            find=true;
+                            break;
                         }
                     }
                 }
+                // for(auto match:target_to_view){
+                //     auto view_node_id=match.second;
+                //     if(view_node_id==start_node_id){
+                //         auto target_node_id=match.first;
+                //         auto target_node=&(target_graph_->GetNode(target_node_id));
+                //         if(target_node->RhsDegree()==1){
+                //             auto &target_rhs_relp=target_graph_->GetRelationship(target_node->RhsRelps()[0]);
+                //             target_graph_->RemoveRelationship(target_rhs_relp.ID());
+                //         }
+                //         else{
+                //             auto &target_lhs_relp=target_graph_->GetRelationship(target_node->LhsRelps()[0]);
+                //             target_graph_->RemoveRelationship(target_lhs_relp.ID());
+                //         }
+                //     }
+                // }
             }
             else{
                 for(auto match:target_to_view){

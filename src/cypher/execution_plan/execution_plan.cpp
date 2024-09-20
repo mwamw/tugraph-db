@@ -1254,6 +1254,7 @@ OpBase *ExecutionPlan::BuildSgl(const parser::SglQuery &stmt, size_t parts_offse
          * When we do the WHERE filter AFTER the aggregation, we use the record produced
          * by aggregate, whose alias_id_map is changed. For instance, the id of edge_num
          * in the original alias_id_map is 3, while the new id is 1.  */
+        std::cout<<"realign alias id"<<std::endl;
         _RealignAliasId(sgl_root, _pattern_graphs[parts_offset + i].symbol_table);
         sgl_root = _Connect(sgl_root, segments[i], &_pattern_graphs[parts_offset + i]);
     }
@@ -1261,16 +1262,18 @@ OpBase *ExecutionPlan::BuildSgl(const parser::SglQuery &stmt, size_t parts_offse
 }
 
 static bool CheckReturnElements(const std::vector<parser::SglQuery> &stmt) {
-    Clause::TYPE_RETURN ret;
+    const Clause::TYPE_RETURN *ret = nullptr;
     if (!stmt.empty()) {
         auto &last_part = stmt[0].parts.back();
-        if (last_part.return_clause) ret = *last_part.return_clause;
+        if (last_part.return_clause) ret = last_part.return_clause;
     }
     for (size_t i = 1; i < stmt.size(); i++) {
         auto &last_part = stmt[i].parts.back();
         auto last_ret = last_part.return_clause;
-        if (!last_ret) return false;
-        auto &ret_items = std::get<0>(std::get<1>(ret));
+        // if (!last_ret) return false;
+        if((last_ret && (!ret))||(!last_ret&& (ret)))return false;
+        if(!last_ret && !ret)continue;
+        auto &ret_items = std::get<0>(std::get<1>(*ret));
         auto &last_ret_items = std::get<0>(std::get<1>(*last_ret));
         // some certain single query (e.g. MATCH(n) RETURN *) without no return items
         // cannot be unioned.
